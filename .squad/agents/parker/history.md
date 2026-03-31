@@ -67,3 +67,30 @@
 - **Outputs:** All patterns provide comprehensive outputs (resource IDs, URLs, endpoints, instrumentation keys) matching standardized schema with deployedResources array
 - **Cost Targets:** serverless-api ~$5-15/day (Consumption plans), web-app-private-endpoint ~$20-40/day (B1 tier), azure-monitor-baseline ~$10-25/day (Log Analytics ingestion)
 
+
+### 2026-03-31: Wave 2 Infrastructure Complete - Landing Zone Foundation Pattern
+- **Deliverable:** Complete, deployable Bicep template for Landing Zone Foundation pattern (resource group scope)
+- **Pattern Architecture:** Governance building blocks for Azure environments - simplified RG-scoped version demonstrating governance without management group permissions
+- **Resources Deployed:** 
+  - Log Analytics workspace (90-day retention, 5GB daily cap, PerGB2018 SKU)
+  - Automation Account (Basic SKU, system managed identity, linked to Log Analytics)
+  - Key Vault (RBAC authorization, soft delete enabled, purge protection, 90-day soft delete retention)
+  - Storage Account (Standard LRS, HTTPS only, TLS 1.2 minimum, blob soft delete 7 days)
+  - Action Group (email notifications for alerts)
+  - Budget Alert (monitors spending against $1000/month, alerts at 80% and 100% thresholds)
+  - Activity Log diagnostic settings (sends to Log Analytics)
+  - Network Watcher (documented as auto-created resource)
+  - Recovery Services Vault (Standard tier, system managed identity)
+- **Security Features:** Key Vault with RBAC auth (no access policies), storage HTTPS-only + minimum TLS 1.2, managed identities on Automation Account and Recovery Vault, soft delete and purge protection on Key Vault, blob soft delete on storage, all network ACLs allowing Azure services
+- **Diagnostic Settings:** Key Vault logs (allLogs category group + metrics), Storage Account metrics, Blob service logs (read/write/delete + metrics), Recovery Vault logs (allLogs + Health metrics), Activity Log (allLogs) - all sent to Log Analytics
+- **ARM JSON Generation:** Valid azuredeploy.json (16.7KB) compiled from Bicep for Azure Portal Deploy button compatibility
+- **Parameters File:** dev.parameters.json with cost-efficient defaults (90-day retention, $1000 budget, 48-hour TTL, alerts@example.com placeholder)
+- **Architecture Diagram:** Updated architecture.mmd to accurately reflect 7 deployed resources organized by function (Monitoring/Observability, Governance/Automation, Security/Compliance, Business Continuity, Network Infrastructure)
+- **Bicep Validation:** Successfully compiles with az bicep build (only BCP334 warning for action group short name minimum length - acceptable)
+- **Resource Naming:** Consistent patterns using ${prefix}-${uniqueString(resourceGroup().id)}` suffix, abbreviations follow Azure CAF standards (log-, aa-, kv-, st, ag-, budget-, rsv-, nw-)
+- **Scope Change from Scaffold:** Changed from subscription scope (management groups, policy assignments) to resource group scope (deployable via standard Deploy to Azure button without elevated permissions)
+- **Budget Implementation:** Fixed utcNow() error in budget start date (can only be used in parameter defaults) - changed to static '2024-01-01' start date
+- **Network Watcher Handling:** Documented as auto-created resource by Azure (exists in NetworkWatcherRG), included resource ID as output for completeness
+- **Outputs:** workspaceId, keyVaultUri, storageAccountName, automationAccountId, recoveryVaultId, budgetName, actionGroupId, networkWatcherId, deployedResources array (6 resources), deploymentTimestamp
+- **Cost Target:** ~$15-30/day (mostly Log Analytics ingestion + Recovery Services Vault storage)
+- **Quality Bar:** Matches Wave 1 patterns quality - complete resource definitions, no TODOs, valid syntax, comprehensive outputs, proper tagging, security by default

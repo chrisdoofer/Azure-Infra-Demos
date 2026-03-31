@@ -1,45 +1,45 @@
 graph TB
-    subgraph "Subscription"
-        subgraph "Governance Layer"
-            POL[Azure Policy<br/>Assignments]
-            RBAC[RBAC Roles<br/>& Assignments]
-            BUDGET[Cost Management<br/>& Budgets]
+    subgraph "Resource Group Scope"
+        subgraph "Monitoring & Observability"
+            LAW[Log Analytics Workspace<br/>90-day retention<br/>5GB daily cap]
+            AI[Action Group<br/>Email alerts]
+            DIAG[Activity Log<br/>Diagnostic Settings]
         end
         
-        subgraph "Foundation Resource Groups"
-            RG_MGMT[rg-management<br/>Log Analytics]
-            RG_CONN[rg-connectivity<br/>Hub Network]
-            RG_SEC[rg-security<br/>Security Center]
+        subgraph "Governance & Automation"
+            AA[Automation Account<br/>Basic SKU<br/>System Managed Identity]
+            BUDGET[Budget Alert<br/>$1000/month<br/>80% & 100% thresholds]
+        end
+        
+        subgraph "Security & Compliance"
+            KV[Key Vault<br/>RBAC auth<br/>Soft delete enabled<br/>Purge protection]
+            ST[Storage Account<br/>Standard LRS<br/>HTTPS only, TLS 1.2<br/>Audit logs]
+        end
+        
+        subgraph "Business Continuity"
+            RSV[Recovery Services Vault<br/>Standard tier<br/>System Managed Identity]
+        end
+        
+        subgraph "Network Infrastructure"
+            NW[Network Watcher<br/>Auto-created]
         end
     end
     
-    subgraph "Management Group Hierarchy"
-        ROOT[Root MG]
-        PLATFORM[Platform MG]
-        LZ[Landing Zones MG]
-        SANDBOX[Sandbox MG]
-        
-        ROOT --> PLATFORM
-        ROOT --> LZ
-        ROOT --> SANDBOX
-    end
+    LAW -->|Linked service| AA
+    LAW -->|Receives logs| KV
+    LAW -->|Receives logs| ST
+    LAW -->|Receives logs| RSV
+    LAW -->|Activity log| DIAG
+    AI -->|Sends email| BUDGET
     
-    POL -.->|Enforce| RG_MGMT
-    POL -.->|Enforce| RG_CONN
-    POL -.->|Enforce| RG_SEC
+    classDef monitoring fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    classDef security fill:#FF5733,stroke:#000,stroke-width:2px,color:#fff
+    classDef governance fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
+    classDef backup fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
+    classDef network fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
     
-    RBAC -.->|Control Access| RG_MGMT
-    RBAC -.->|Control Access| RG_CONN
-    RBAC -.->|Control Access| RG_SEC
-    
-    BUDGET -.->|Monitor| RG_MGMT
-    BUDGET -.->|Monitor| RG_CONN
-    BUDGET -.->|Monitor| RG_SEC
-    
-    classDef governance fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
-    classDef rg fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
-    classDef mg fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
-    
-    class POL,RBAC,BUDGET governance
-    class RG_MGMT,RG_CONN,RG_SEC rg
-    class ROOT,PLATFORM,LZ,SANDBOX mg
+    class LAW,AI,DIAG monitoring
+    class KV,ST security
+    class AA,BUDGET governance
+    class RSV backup
+    class NW network

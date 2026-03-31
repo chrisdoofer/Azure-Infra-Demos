@@ -1,36 +1,31 @@
 // Landing Zone Foundation
-// Subscription-level deployment: Management Groups, Policy, RBAC
+// Resource Group-scoped governance building blocks
 
-targetScope = 'subscription'
+@description('Azure region for deployment')
+param location string = resourceGroup().location
 
 @description('Prefix for resource naming')
 param prefix string = 'demo'
-
-@description('Management group prefix')
-param managementGroupPrefix string = 'demo'
-
-@description('Root management group display name')
-param rootMgDisplayName string = 'Demo Organization'
 
 @description('Resource tags')
 param tags object = {
   owner: 'pattern-demo'
   workload: 'landing-zone-foundation'
   environment: 'demo'
-  ttlHours: '24'
+  ttlHours: '48'
 }
 
-@description('Primary Azure region')
-param location string = deployment().location
+@description('Email address for alert notifications')
+param alertEmail string
 
-@description('Enable default Azure policies')
-param enableDefaultPolicies bool = true
+@description('Log Analytics retention in days')
+param logRetentionDays int = 90
 
-@description('Budget amount in USD')
-param budgetAmount int = 1000
+@description('Enable budget alert')
+param enableBudgetAlert bool = true
 
-@description('Budget notification email')
-param budgetNotificationEmail string = 'admin@example.com'
+@description('Monthly budget amount in USD')
+param monthlyBudgetAmount int = 1000
 
 @description('Deployment timestamp')
 param deploymentTime string = utcNow('u')
@@ -39,110 +34,269 @@ param deploymentTime string = utcNow('u')
 // VARIABLES
 // ============================================================================
 
+var resourceSuffix = '${prefix}-${uniqueString(resourceGroup().id)}'
 var commonTags = union(tags, {
   deployedAt: deploymentTime
   pattern: 'landing-zone-foundation'
 })
 
-// Use prefix for consistency (managementGroupPrefix for MG-specific naming)
-var effectivePrefix = managementGroupPrefix
-
-// Management group structure
-var managementGroups = {
-  platform: '${effectivePrefix}-platform'
-  landingZones: '${effectivePrefix}-landingzones'
-  sandbox: '${effectivePrefix}-sandbox'
-  decommissioned: '${effectivePrefix}-decommissioned'
-}
-
-// ============================================================================
-// RESOURCE GROUPS FOR SHARED RESOURCES
-// ============================================================================
-
-resource rgManagement 'Microsoft.Resources/resourceGroups@2023-07-01' = {
-  name: 'rg-management'
-  location: location
-  tags: commonTags
-}
-
-resource rgConnectivity 'Microsoft.Resources/resourceGroups@2023-07-01' = {
-  name: 'rg-connectivity'
-  location: location
-  tags: commonTags
-}
-
-resource rgSecurity 'Microsoft.Resources/resourceGroups@2023-07-01' = {
-  name: 'rg-security'
-  location: location
-  tags: commonTags
-}
+var logAnalyticsName = 'log-${resourceSuffix}'
+var automationAccountName = 'aa-${resourceSuffix}'
+var keyVaultName = 'kv-${take(replace(resourceSuffix, '-', ''), 24)}'
+var storageAccountName = 'st${replace(take(resourceSuffix, 17), '-', '')}'
+var actionGroupName = 'ag-${resourceSuffix}'
+var budgetName = 'budget-${resourceSuffix}'
+var recoveryVaultName = 'rsv-${resourceSuffix}'
+var networkWatcherName = 'nw-${location}'
 
 // ============================================================================
 // LOG ANALYTICS WORKSPACE
 // ============================================================================
 
-module logAnalyticsWorkspace 'br/public:avm/res/operational-insights/workspace:0.3.0' = {
-  scope: rgManagement
-  name: 'log-analytics-deployment'
-  params: {
-    name: 'log-${prefix}-${uniqueString(subscription().subscriptionId)}'
-    location: location
-    tags: commonTags
-    dataRetention: 30
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
+  name: logAnalyticsName
+  location: location
+  tags: commonTags
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: logRetentionDays
+    features: {
+      enableLogAccessUsingOnlyResourcePermissions: true
+    }
+    workspaceCapping: {
+      dailyQuotaGb: 5
+    }
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
   }
 }
 
 // ============================================================================
-// POLICY ASSIGNMENTS (Subscription Level)
+// AUTOMATION ACCOUNT
 // ============================================================================
 
-resource policyAssignmentTags 'Microsoft.Authorization/policyAssignments@2023-04-01' = if (enableDefaultPolicies) {
-  name: 'require-tag-on-resources'
+resource automationAccount 'Microsoft.Automation/automationAccounts@2023-11-01' = {
+  name: automationAccountName
+  location: location
+  tags: commonTags
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
-    displayName: 'Require tag on resources'
-    description: 'Enforces required tags on all resources'
-    policyDefinitionId: '/providers/Microsoft.Authorization/policyDefinitions/96670d01-0a4d-4649-9c89-2d3abc0a5025'
-    parameters: {
-      tagName: {
-        value: 'owner'
-      }
+    sku: {
+      name: 'Basic'
     }
-    enforcementMode: 'Default'
+    publicNetworkAccess: true
   }
 }
 
-resource policyAssignmentLocations 'Microsoft.Authorization/policyAssignments@2023-04-01' = if (enableDefaultPolicies) {
-  name: 'allowed-locations'
+// Link Automation Account to Log Analytics
+resource automationLinkedWorkspace 'Microsoft.OperationalInsights/workspaces/linkedServices@2020-08-01' = {
+  parent: logAnalytics
+  name: 'Automation'
   properties: {
-    displayName: 'Allowed Azure regions'
-    description: 'Restricts resource deployment to approved Azure regions'
-    policyDefinitionId: '/providers/Microsoft.Authorization/policyDefinitions/e56962a6-4747-49cd-b67b-bf8b01975c4c'
-    parameters: {
-      listOfAllowedLocations: {
-        value: [
-          location
-          'global'
-        ]
-      }
-    }
-    enforcementMode: 'Default'
+    resourceId: automationAccount.id
   }
 }
 
 // ============================================================================
-// BUDGET
+// KEY VAULT
 // ============================================================================
 
-resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
-  name: 'monthly-budget'
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: keyVaultName
+  location: location
+  tags: commonTags
+  properties: {
+    tenantId: subscription().tenantId
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 90
+    enablePurgeProtection: true
+    publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Allow'
+      bypass: 'AzureServices'
+    }
+  }
+}
+
+// Key Vault Diagnostic Settings
+resource keyVaultDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'send-to-log-analytics'
+  scope: keyVault
+  properties: {
+    workspaceId: logAnalytics.id
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
+  }
+}
+
+// ============================================================================
+// STORAGE ACCOUNT
+// ============================================================================
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+  name: storageAccountName
+  location: location
+  tags: commonTags
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    accessTier: 'Hot'
+    supportsHttpsTrafficOnly: true
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+    networkAcls: {
+      defaultAction: 'Allow'
+      bypass: 'AzureServices'
+    }
+  }
+}
+
+// Storage Account Diagnostic Settings
+resource storageDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'send-to-log-analytics'
+  scope: storageAccount
+  properties: {
+    workspaceId: logAnalytics.id
+    metrics: [
+      {
+        category: 'Transaction'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
+  }
+}
+
+// Blob service diagnostic settings
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
+  parent: storageAccount
+  name: 'default'
+  properties: {
+    deleteRetentionPolicy: {
+      enabled: true
+      days: 7
+    }
+  }
+}
+
+resource blobDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'send-to-log-analytics'
+  scope: blobService
+  properties: {
+    workspaceId: logAnalytics.id
+    logs: [
+      {
+        category: 'StorageRead'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+      {
+        category: 'StorageWrite'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+      {
+        category: 'StorageDelete'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
+    metrics: [
+      {
+        category: 'Transaction'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
+  }
+}
+
+// ============================================================================
+// ACTION GROUP
+// ============================================================================
+
+resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
+  name: actionGroupName
+  location: 'global'
+  tags: commonTags
+  properties: {
+    groupShortName: take(prefix, 12)
+    enabled: true
+    emailReceivers: [
+      {
+        name: 'AlertEmail'
+        emailAddress: alertEmail
+        useCommonAlertSchema: true
+      }
+    ]
+  }
+}
+
+// ============================================================================
+// BUDGET ALERT
+// ============================================================================
+
+resource budget 'Microsoft.Consumption/budgets@2023-11-01' = if (enableBudgetAlert) {
+  name: budgetName
   properties: {
     category: 'Cost'
-    amount: budgetAmount
+    amount: monthlyBudgetAmount
     timeGrain: 'Monthly'
     timePeriod: {
-      startDate: '${utcNow('yyyy-MM')}-01'
+      startDate: '2024-01-01'
+    }
+    filter: {
+      dimensions: {
+        name: 'ResourceGroupName'
+        operator: 'In'
+        values: [
+          resourceGroup().name
+        ]
+      }
     }
     notifications: {
       actual_GreaterThan_80_Percent: {
@@ -150,20 +304,98 @@ resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
         operator: 'GreaterThan'
         threshold: 80
         contactEmails: [
-          budgetNotificationEmail
+          alertEmail
         ]
         thresholdType: 'Actual'
       }
-      forecasted_GreaterThan_100_Percent: {
+      actual_GreaterThan_100_Percent: {
         enabled: true
         operator: 'GreaterThan'
         threshold: 100
         contactEmails: [
-          budgetNotificationEmail
+          alertEmail
         ]
-        thresholdType: 'Forecasted'
+        thresholdType: 'Actual'
       }
     }
+  }
+}
+
+// ============================================================================
+// NETWORK WATCHER
+// ============================================================================
+
+// Network Watcher is created automatically by Azure in the NetworkWatcherRG
+// but we document it as part of the foundation for completeness
+var networkWatcherResourceId = '/subscriptions/${subscription().subscriptionId}/resourceGroups/NetworkWatcherRG/providers/Microsoft.Network/networkWatchers/${networkWatcherName}'
+
+// ============================================================================
+// RECOVERY SERVICES VAULT
+// ============================================================================
+
+resource recoveryVault 'Microsoft.RecoveryServices/vaults@2023-06-01' = {
+  name: recoveryVaultName
+  location: location
+  tags: commonTags
+  sku: {
+    name: 'RS0'
+    tier: 'Standard'
+  }
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// Recovery Vault Diagnostic Settings
+resource recoveryVaultDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'send-to-log-analytics'
+  scope: recoveryVault
+  properties: {
+    workspaceId: logAnalytics.id
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
+    metrics: [
+      {
+        category: 'Health'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
+  }
+}
+
+// ============================================================================
+// ACTIVITY LOG DIAGNOSTIC SETTINGS
+// ============================================================================
+
+resource activityLogDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'activity-log-to-log-analytics'
+  properties: {
+    workspaceId: logAnalytics.id
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
   }
 }
 
@@ -171,54 +403,63 @@ resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
 // OUTPUTS
 // ============================================================================
 
-@description('Subscription ID')
-output subscriptionId string = subscription().subscriptionId
+@description('Log Analytics Workspace Resource ID')
+output workspaceId string = logAnalytics.id
 
-@description('Management resource group name')
-output managementResourceGroup string = rgManagement.name
+@description('Key Vault URI')
+output keyVaultUri string = keyVault.properties.vaultUri
 
-@description('Connectivity resource group name')
-output connectivityResourceGroup string = rgConnectivity.name
+@description('Storage Account Name')
+output storageAccountName string = storageAccount.name
 
-@description('Security resource group name')
-output securityResourceGroup string = rgSecurity.name
+@description('Automation Account Resource ID')
+output automationAccountId string = automationAccount.id
 
-@description('Log Analytics Workspace ID')
-output logAnalyticsWorkspaceId string = logAnalyticsWorkspace.outputs.resourceId
+@description('Recovery Services Vault Resource ID')
+output recoveryVaultId string = recoveryVault.id
 
-@description('Management group structure')
-output managementGroups object = managementGroups
+@description('Budget Name')
+output budgetName string = enableBudgetAlert ? budget.name : 'not-deployed'
+
+@description('Action Group Resource ID')
+output actionGroupId string = actionGroup.id
+
+@description('Network Watcher Resource ID')
+output networkWatcherId string = networkWatcherResourceId
 
 @description('List of deployed resources')
 output deployedResources array = [
   {
-    type: 'Microsoft.Resources/resourceGroups'
-    name: rgManagement.name
-    id: rgManagement.id
+    type: 'Microsoft.OperationalInsights/workspaces'
+    name: logAnalytics.name
+    id: logAnalytics.id
   }
   {
-    type: 'Microsoft.Resources/resourceGroups'
-    name: rgConnectivity.name
-    id: rgConnectivity.id
+    type: 'Microsoft.Automation/automationAccounts'
+    name: automationAccount.name
+    id: automationAccount.id
   }
   {
-    type: 'Microsoft.Resources/resourceGroups'
-    name: rgSecurity.name
-    id: rgSecurity.id
+    type: 'Microsoft.KeyVault/vaults'
+    name: keyVault.name
+    id: keyVault.id
+  }
+  {
+    type: 'Microsoft.Storage/storageAccounts'
+    name: storageAccount.name
+    id: storageAccount.id
+  }
+  {
+    type: 'Microsoft.Insights/actionGroups'
+    name: actionGroup.name
+    id: actionGroup.id
+  }
+  {
+    type: 'Microsoft.RecoveryServices/vaults'
+    name: recoveryVault.name
+    id: recoveryVault.id
   }
 ]
 
 @description('Deployment timestamp')
 output deploymentTimestamp string = deploymentTime
-
-@description('Next steps')
-output nextSteps string = '''
-Landing Zone Foundation deployed successfully!
-
-Next steps:
-1. Review policy assignments in Azure Policy
-2. Create additional management groups as needed
-3. Assign users to appropriate RBAC roles
-4. Deploy hub network in rg-connectivity
-5. Configure Azure Security Center in rg-security
-'''

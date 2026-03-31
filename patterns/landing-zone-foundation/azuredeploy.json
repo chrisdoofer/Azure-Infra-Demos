@@ -1,0 +1,535 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "14614851570328955746"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for deployment"
+      }
+    },
+    "prefix": {
+      "type": "string",
+      "defaultValue": "demo",
+      "metadata": {
+        "description": "Prefix for resource naming"
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "owner": "pattern-demo",
+        "workload": "landing-zone-foundation",
+        "environment": "demo",
+        "ttlHours": "48"
+      },
+      "metadata": {
+        "description": "Resource tags"
+      }
+    },
+    "alertEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Email address for alert notifications"
+      }
+    },
+    "logRetentionDays": {
+      "type": "int",
+      "defaultValue": 90,
+      "metadata": {
+        "description": "Log Analytics retention in days"
+      }
+    },
+    "enableBudgetAlert": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable budget alert"
+      }
+    },
+    "monthlyBudgetAmount": {
+      "type": "int",
+      "defaultValue": 1000,
+      "metadata": {
+        "description": "Monthly budget amount in USD"
+      }
+    },
+    "deploymentTime": {
+      "type": "string",
+      "defaultValue": "[utcNow('u')]",
+      "metadata": {
+        "description": "Deployment timestamp"
+      }
+    }
+  },
+  "variables": {
+    "resourceSuffix": "[format('{0}-{1}', parameters('prefix'), uniqueString(resourceGroup().id))]",
+    "commonTags": "[union(parameters('tags'), createObject('deployedAt', parameters('deploymentTime'), 'pattern', 'landing-zone-foundation'))]",
+    "logAnalyticsName": "[format('log-{0}', variables('resourceSuffix'))]",
+    "automationAccountName": "[format('aa-{0}', variables('resourceSuffix'))]",
+    "keyVaultName": "[format('kv-{0}', take(replace(variables('resourceSuffix'), '-', ''), 24))]",
+    "storageAccountName": "[format('st{0}', replace(take(variables('resourceSuffix'), 17), '-', ''))]",
+    "actionGroupName": "[format('ag-{0}', variables('resourceSuffix'))]",
+    "budgetName": "[format('budget-{0}', variables('resourceSuffix'))]",
+    "recoveryVaultName": "[format('rsv-{0}', variables('resourceSuffix'))]",
+    "networkWatcherName": "[format('nw-{0}', parameters('location'))]",
+    "networkWatcherResourceId": "[format('/subscriptions/{0}/resourceGroups/NetworkWatcherRG/providers/Microsoft.Network/networkWatchers/{1}', subscription().subscriptionId, variables('networkWatcherName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2022-10-01",
+      "name": "[variables('logAnalyticsName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": "[parameters('logRetentionDays')]",
+        "features": {
+          "enableLogAccessUsingOnlyResourcePermissions": true
+        },
+        "workspaceCapping": {
+          "dailyQuotaGb": 5
+        },
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts",
+      "apiVersion": "2023-11-01",
+      "name": "[variables('automationAccountName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "sku": {
+          "name": "Basic"
+        },
+        "publicNetworkAccess": true
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/linkedServices",
+      "apiVersion": "2020-08-01",
+      "name": "[format('{0}/{1}', variables('logAnalyticsName'), 'Automation')]",
+      "properties": {
+        "resourceId": "[resourceId('Microsoft.Automation/automationAccounts', variables('automationAccountName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', variables('automationAccountName'))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "[variables('keyVaultName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "tenantId": "[subscription().tenantId]",
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "enablePurgeProtection": true,
+        "publicNetworkAccess": "Enabled",
+        "networkAcls": {
+          "defaultAction": "Allow",
+          "bypass": "AzureServices"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.KeyVault/vaults/{0}', variables('keyVaultName'))]",
+      "name": "send-to-log-analytics",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "accessTier": "Hot",
+        "supportsHttpsTrafficOnly": true,
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": false,
+        "networkAcls": {
+          "defaultAction": "Allow",
+          "bypass": "AzureServices"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Storage/storageAccounts/{0}', variables('storageAccountName'))]",
+      "name": "send-to-log-analytics",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "metrics": [
+          {
+            "category": "Transaction",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+      "properties": {
+        "deleteRetentionPolicy": {
+          "enabled": true,
+          "days": 7
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Storage/storageAccounts/{0}/blobServices/{1}', variables('storageAccountName'), 'default')]",
+      "name": "send-to-log-analytics",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "logs": [
+          {
+            "category": "StorageRead",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          },
+          {
+            "category": "StorageWrite",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          },
+          {
+            "category": "StorageDelete",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ],
+        "metrics": [
+          {
+            "category": "Transaction",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageAccountName'), 'default')]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/actionGroups",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('actionGroupName')]",
+      "location": "global",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "groupShortName": "[take(parameters('prefix'), 12)]",
+        "enabled": true,
+        "emailReceivers": [
+          {
+            "name": "AlertEmail",
+            "emailAddress": "[parameters('alertEmail')]",
+            "useCommonAlertSchema": true
+          }
+        ]
+      }
+    },
+    {
+      "condition": "[parameters('enableBudgetAlert')]",
+      "type": "Microsoft.Consumption/budgets",
+      "apiVersion": "2023-11-01",
+      "name": "[variables('budgetName')]",
+      "properties": {
+        "category": "Cost",
+        "amount": "[parameters('monthlyBudgetAmount')]",
+        "timeGrain": "Monthly",
+        "timePeriod": {
+          "startDate": "2024-01-01"
+        },
+        "filter": {
+          "dimensions": {
+            "name": "ResourceGroupName",
+            "operator": "In",
+            "values": [
+              "[resourceGroup().name]"
+            ]
+          }
+        },
+        "notifications": {
+          "actual_GreaterThan_80_Percent": {
+            "enabled": true,
+            "operator": "GreaterThan",
+            "threshold": 80,
+            "contactEmails": [
+              "[parameters('alertEmail')]"
+            ],
+            "thresholdType": "Actual"
+          },
+          "actual_GreaterThan_100_Percent": {
+            "enabled": true,
+            "operator": "GreaterThan",
+            "threshold": 100,
+            "contactEmails": [
+              "[parameters('alertEmail')]"
+            ],
+            "thresholdType": "Actual"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.RecoveryServices/vaults",
+      "apiVersion": "2023-06-01",
+      "name": "[variables('recoveryVaultName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "RS0",
+        "tier": "Standard"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.RecoveryServices/vaults/{0}', variables('recoveryVaultName'))]",
+      "name": "send-to-log-analytics",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ],
+        "metrics": [
+          {
+            "category": "Health",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "[resourceId('Microsoft.RecoveryServices/vaults', variables('recoveryVaultName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "name": "activity-log-to-log-analytics",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "workspaceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics Workspace Resource ID"
+      },
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Key Vault URI"
+      },
+      "value": "[reference(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), '2023-07-01').vaultUri]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage Account Name"
+      },
+      "value": "[variables('storageAccountName')]"
+    },
+    "automationAccountId": {
+      "type": "string",
+      "metadata": {
+        "description": "Automation Account Resource ID"
+      },
+      "value": "[resourceId('Microsoft.Automation/automationAccounts', variables('automationAccountName'))]"
+    },
+    "recoveryVaultId": {
+      "type": "string",
+      "metadata": {
+        "description": "Recovery Services Vault Resource ID"
+      },
+      "value": "[resourceId('Microsoft.RecoveryServices/vaults', variables('recoveryVaultName'))]"
+    },
+    "budgetName": {
+      "type": "string",
+      "metadata": {
+        "description": "Budget Name"
+      },
+      "value": "[if(parameters('enableBudgetAlert'), variables('budgetName'), 'not-deployed')]"
+    },
+    "actionGroupId": {
+      "type": "string",
+      "metadata": {
+        "description": "Action Group Resource ID"
+      },
+      "value": "[resourceId('Microsoft.Insights/actionGroups', variables('actionGroupName'))]"
+    },
+    "networkWatcherId": {
+      "type": "string",
+      "metadata": {
+        "description": "Network Watcher Resource ID"
+      },
+      "value": "[variables('networkWatcherResourceId')]"
+    },
+    "deployedResources": {
+      "type": "array",
+      "metadata": {
+        "description": "List of deployed resources"
+      },
+      "value": [
+        {
+          "type": "Microsoft.OperationalInsights/workspaces",
+          "name": "[variables('logAnalyticsName')]",
+          "id": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+        },
+        {
+          "type": "Microsoft.Automation/automationAccounts",
+          "name": "[variables('automationAccountName')]",
+          "id": "[resourceId('Microsoft.Automation/automationAccounts', variables('automationAccountName'))]"
+        },
+        {
+          "type": "Microsoft.KeyVault/vaults",
+          "name": "[variables('keyVaultName')]",
+          "id": "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
+        },
+        {
+          "type": "Microsoft.Storage/storageAccounts",
+          "name": "[variables('storageAccountName')]",
+          "id": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+        },
+        {
+          "type": "Microsoft.Insights/actionGroups",
+          "name": "[variables('actionGroupName')]",
+          "id": "[resourceId('Microsoft.Insights/actionGroups', variables('actionGroupName'))]"
+        },
+        {
+          "type": "Microsoft.RecoveryServices/vaults",
+          "name": "[variables('recoveryVaultName')]",
+          "id": "[resourceId('Microsoft.RecoveryServices/vaults', variables('recoveryVaultName'))]"
+        }
+      ]
+    },
+    "deploymentTimestamp": {
+      "type": "string",
+      "metadata": {
+        "description": "Deployment timestamp"
+      },
+      "value": "[parameters('deploymentTime')]"
+    }
+  }
+}

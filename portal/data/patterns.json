@@ -118,23 +118,23 @@
     "id": "pat-006",
     "slug": "landing-zone-foundation",
     "title": "Landing Zone Foundation",
-    "summary": "Azure Landing Zone baseline with management group hierarchy, core policies, RBAC assignments, and Cost Management configuration. Foundation for governed multi-subscription environments.",
+    "summary": "Governance baseline that deploys the essential building blocks every Azure environment needs — centralised logging, secrets management, cost controls, backup infrastructure, and automated alerting. Deploys in 5 minutes, establishes compliance-ready foundations.",
     "sourceUrl": "https://learn.microsoft.com/azure/architecture/landing-zones/",
     "category": "governance",
-    "tags": ["governance", "landing-zone", "policy", "rbac", "management-groups", "compliance", "foundation"],
-    "primaryServices": ["Management Groups", "Azure Policy", "Role-Based Access Control", "Cost Management"],
-    "estimatedCostBand": "low",
-    "complexity": 4,
-    "typicalDeployTimeMinutes": 20,
-    "deploymentModesSupported": [],
+    "tags": ["governance", "landing-zone", "compliance", "cost-management", "key-vault", "logging", "foundation"],
+    "primaryServices": ["Log Analytics", "Key Vault", "Automation Account", "Recovery Services Vault", "Budget Alerts", "Storage Account"],
+    "estimatedCostBand": "medium",
+    "complexity": 3,
+    "typicalDeployTimeMinutes": 5,
+    "deploymentModesSupported": ["portal", "actions"],
     "templatePath": "patterns/landing-zone-foundation/azuredeploy.json",
     "actionsWorkflowInputsExample": {
-      "managementGroupPrefix": "contoso",
-      "securityContactEmail": "security@contoso.com",
-      "enablePolicyAssignments": "true",
-      "logAnalyticsWorkspaceId": "/subscriptions/.../workspaces/law-central"
+      "resourceGroupName": "rg-landing-zone",
+      "location": "australiaeast",
+      "prefix": "lz",
+      "alertEmail": "alerts@example.com"
     },
-    "lastReviewedDate": "2024-03-01"
+    "lastReviewedDate": "2026-03-31"
   },
   {
     "id": "pat-007",
