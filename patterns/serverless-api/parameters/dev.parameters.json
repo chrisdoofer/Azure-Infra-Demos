@@ -12,7 +12,7 @@
       "value": "node"
     },
     "functionRuntimeVersion": {
-      "value": "18"
+      "value": "20"
     },
     "cosmosDbConsistency": {
       "value": "Session"
@@ -25,7 +25,7 @@
         "owner": "pattern-demo",
         "workload": "serverless-api",
         "environment": "dev",
-        "ttlHours": "24"
+        "ttlHours": "48"
       }
     }
   }

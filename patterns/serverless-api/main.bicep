@@ -138,6 +138,15 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
         failoverPriority: 0
       }
     ]
+    capabilities: [
+      {
+        name: 'EnableServerless'
+      }
+    ]
+    enableAutomaticFailover: false
+    enableMultipleWriteLocations: false
+    publicNetworkAccess: 'Enabled'
+    disableKeyBasedMetadataWriteAccess: false
   }
 }
 
@@ -163,7 +172,25 @@ resource cosmosContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
         ]
         kind: 'Hash'
       }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+      }
     }
+  }
+}
+
+// Store Cosmos connection string in Key Vault
+resource cosmosConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'CosmosDbConnectionString'
+  properties: {
+    value: cosmosAccount.listConnectionStrings().connectionStrings[0].connectionString
   }
 }
 
@@ -171,11 +198,24 @@ resource cosmosContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
 // FUNCTION APP
 // ============================================================================
 
+resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
+  name: 'asp-${resourceSuffix}'
+  location: location
+  tags: commonTags
+  sku: {
+    name: 'Y1'
+    tier: 'Dynamic'
+  }
+  properties: {
+    reserved: true
+  }
+}
+
 resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   name: functionAppName
   location: location
   tags: commonTags
-  kind: 'functionapp'
+  kind: 'functionapp,linux'
   identity: {
     type: 'SystemAssigned'
   }
@@ -185,6 +225,7 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
     siteConfig: {
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      linuxFxVersion: functionRuntime == 'node' ? 'NODE|${functionRuntimeVersion}' : (functionRuntime == 'python' ? 'PYTHON|3.11' : 'DOTNET-ISOLATED|8.0')
       appSettings: [
         {
           name: 'AzureWebJobsStorage'
@@ -207,10 +248,6 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           value: functionRuntime
         }
         {
-          name: 'WEBSITE_NODE_DEFAULT_VERSION'
-          value: functionRuntimeVersion
-        }
-        {
           name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
           value: appInsights.properties.InstrumentationKey
         }
@@ -219,8 +256,12 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           value: appInsights.properties.ConnectionString
         }
         {
+          name: 'CosmosDbEndpoint'
+          value: cosmosAccount.properties.documentEndpoint
+        }
+        {
           name: 'CosmosDbConnectionString'
-          value: cosmosAccount.listConnectionStrings().connectionStrings[0].connectionString
+          value: '@Microsoft.KeyVault(SecretUri=${cosmosConnectionStringSecret.properties.secretUri})'
         }
         {
           name: 'KeyVaultUri'
@@ -231,16 +272,23 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   }
 }
 
-resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
-  name: 'asp-${resourceSuffix}'
-  location: location
-  tags: commonTags
-  sku: {
-    name: 'Y1'
-    tier: 'Dynamic'
-  }
+// Grant Function App access to Key Vault
+resource keyVaultAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
+  parent: keyVault
+  name: 'add'
   properties: {
-    reserved: true
+    accessPolicies: [
+      {
+        tenantId: subscription().tenantId
+        objectId: functionApp.identity.principalId
+        permissions: {
+          secrets: [
+            'get'
+            'list'
+          ]
+        }
+      }
+    ]
   }
 }
 
@@ -262,6 +310,50 @@ resource apiManagement 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
   }
 }
 
+// Create API in APIM that fronts the Function App
+resource apimApi 'Microsoft.ApiManagement/service/apis@2023-05-01-preview' = {
+  parent: apiManagement
+  name: 'serverless-api'
+  properties: {
+    displayName: 'Serverless API'
+    description: 'API powered by Azure Functions'
+    path: 'api'
+    protocols: [
+      'https'
+    ]
+    subscriptionRequired: false
+    serviceUrl: 'https://${functionApp.properties.defaultHostName}/api'
+  }
+}
+
+// Create a sample operation
+resource apimOperation 'Microsoft.ApiManagement/service/apis/operations@2023-05-01-preview' = {
+  parent: apimApi
+  name: 'get-items'
+  properties: {
+    displayName: 'Get Items'
+    method: 'GET'
+    urlTemplate: '/items'
+    description: 'Retrieve items from the API'
+    responses: [
+      {
+        statusCode: 200
+        description: 'Success'
+      }
+    ]
+  }
+}
+
+// Add backend policy to forward to Function App
+resource apimPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2023-05-01-preview' = {
+  parent: apimOperation
+  name: 'policy'
+  properties: {
+    format: 'rawxml'
+    value: '<policies><inbound><base /><set-backend-service base-url="https://${functionApp.properties.defaultHostName}/api" /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+  }
+}
+
 // ============================================================================
 // OUTPUTS
 // ============================================================================
@@ -274,6 +366,15 @@ output functionAppName string = functionApp.name
 
 @description('Function App URL')
 output functionAppUrl string = 'https://${functionApp.properties.defaultHostName}'
+
+@description('API Management Gateway URL')
+output apimGatewayUrl string = 'https://${apiManagement.properties.gatewayUrl}/api'
+
+@description('Cosmos DB Endpoint')
+output cosmosDbEndpoint string = cosmosAccount.properties.documentEndpoint
+
+@description('Application Insights Instrumentation Key')
+output appInsightsInstrumentationKey string = appInsights.properties.InstrumentationKey
 
 @description('Cosmos DB account name')
 output cosmosAccountName string = cosmosAccount.name

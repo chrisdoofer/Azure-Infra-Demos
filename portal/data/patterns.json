@@ -35,16 +35,16 @@
     "estimatedCostBand": "medium",
     "complexity": 2,
     "typicalDeployTimeMinutes": 10,
-    "deploymentModesSupported": [],
+    "deploymentModesSupported": ["portal", "actions"],
     "templatePath": "patterns/web-app-private-endpoint/azuredeploy.json",
     "actionsWorkflowInputsExample": {
       "resourceGroupName": "rg-webapp-private",
-      "location": "westus2",
-      "appServicePlanSku": "P1v3",
+      "location": "australiaeast",
+      "appServicePlanSku": "B1",
       "vnetAddressPrefix": "10.1.0.0/16",
       "privateEndpointSubnetPrefix": "10.1.0.0/24"
     },
-    "lastReviewedDate": "2024-03-10"
+    "lastReviewedDate": "2026-03-31"
   },
   {
     "id": "pat-003",
@@ -58,15 +58,15 @@
     "estimatedCostBand": "low",
     "complexity": 2,
     "typicalDeployTimeMinutes": 8,
-    "deploymentModesSupported": [],
+    "deploymentModesSupported": ["portal", "actions"],
     "templatePath": "patterns/azure-monitor-baseline/azuredeploy.json",
     "actionsWorkflowInputsExample": {
       "resourceGroupName": "rg-monitoring",
-      "location": "centralus",
-      "logAnalyticsRetentionDays": "90",
-      "enableAlerts": "true"
+      "location": "australiaeast",
+      "logAnalyticsRetentionDays": "30",
+      "alertEmail": "your-email@example.com"
     },
-    "lastReviewedDate": "2024-03-12"
+    "lastReviewedDate": "2026-03-31"
   },
   {
     "id": "pat-004",
@@ -80,16 +80,15 @@
     "estimatedCostBand": "low",
     "complexity": 2,
     "typicalDeployTimeMinutes": 12,
-    "deploymentModesSupported": [],
+    "deploymentModesSupported": ["portal", "actions"],
     "templatePath": "patterns/serverless-api/azuredeploy.json",
     "actionsWorkflowInputsExample": {
       "resourceGroupName": "rg-serverless-api",
-      "location": "westeurope",
-      "functionAppName": "func-api-prod",
-      "cosmosDbThroughput": "400",
-      "apimSku": "Consumption"
+      "location": "australiaeast",
+      "prefix": "demo",
+      "functionRuntime": "node"
     },
-    "lastReviewedDate": "2024-03-08"
+    "lastReviewedDate": "2026-03-31"
   },
   {
     "id": "pat-005",

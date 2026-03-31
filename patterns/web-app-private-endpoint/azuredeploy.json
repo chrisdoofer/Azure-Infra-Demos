@@ -1,0 +1,354 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "6286433675906085905"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for deployment"
+      }
+    },
+    "prefix": {
+      "type": "string",
+      "defaultValue": "demo",
+      "metadata": {
+        "description": "Prefix for resource naming"
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "owner": "pattern-demo",
+        "workload": "web-app-private-endpoint",
+        "environment": "demo",
+        "ttlHours": "24"
+      },
+      "metadata": {
+        "description": "Resource tags"
+      }
+    },
+    "appServiceSku": {
+      "type": "string",
+      "defaultValue": "B1",
+      "metadata": {
+        "description": "App Service Plan SKU (B1, B2, B3, S1, S2, S3, P1v2, P1v3)"
+      }
+    },
+    "vnetAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/16",
+      "metadata": {
+        "description": "Virtual Network address prefix"
+      }
+    },
+    "appSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.1.0/24",
+      "metadata": {
+        "description": "App integration subnet address prefix"
+      }
+    },
+    "privateEndpointSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.2.0/24",
+      "metadata": {
+        "description": "Private Endpoint subnet address prefix"
+      }
+    },
+    "deploymentTime": {
+      "type": "string",
+      "defaultValue": "[utcNow('u')]",
+      "metadata": {
+        "description": "Deployment timestamp"
+      }
+    }
+  },
+  "variables": {
+    "resourceSuffix": "[format('{0}-{1}', parameters('prefix'), uniqueString(resourceGroup().id))]",
+    "commonTags": "[union(parameters('tags'), createObject('deployedAt', parameters('deploymentTime'), 'pattern', 'web-app-private-endpoint'))]",
+    "appServiceName": "[format('app-{0}', variables('resourceSuffix'))]",
+    "appServicePlanName": "[format('asp-{0}', variables('resourceSuffix'))]",
+    "vnetName": "[format('vnet-{0}', variables('resourceSuffix'))]",
+    "privateEndpointName": "[format('pe-{0}', variables('resourceSuffix'))]",
+    "privateDnsZoneName": "privatelink.azurewebsites.net",
+    "nsgName": "[format('nsg-{0}', variables('resourceSuffix'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('nsgName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "AllowVnetInbound",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "DenyAllInbound",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Deny",
+              "priority": 4096,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('vnetName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('vnetAddressPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "AppIntegrationSubnet",
+            "properties": {
+              "addressPrefix": "[parameters('appSubnetPrefix')]",
+              "delegations": [
+                {
+                  "name": "appServiceDelegation",
+                  "properties": {
+                    "serviceName": "Microsoft.Web/serverFarms"
+                  }
+                }
+              ],
+              "privateEndpointNetworkPolicies": "Enabled"
+            }
+          },
+          {
+            "name": "PrivateEndpointSubnet",
+            "properties": {
+              "addressPrefix": "[parameters('privateEndpointSubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+              },
+              "privateEndpointNetworkPolicies": "Disabled"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('privateDnsZoneName')]",
+      "location": "global",
+      "tags": "[variables('commonTags')]"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', variables('privateDnsZoneName'), format('{0}-link', variables('vnetName')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('appServicePlanName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "[parameters('appServiceSku')]",
+        "tier": "[if(or(or(equals(parameters('appServiceSku'), 'B1'), equals(parameters('appServiceSku'), 'B2')), equals(parameters('appServiceSku'), 'B3')), 'Basic', if(or(or(equals(parameters('appServiceSku'), 'S1'), equals(parameters('appServiceSku'), 'S2')), equals(parameters('appServiceSku'), 'S3')), 'Standard', 'PremiumV2'))]"
+      },
+      "kind": "linux",
+      "properties": {
+        "reserved": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('appServiceName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "httpsOnly": true,
+        "publicNetworkAccess": "Disabled",
+        "siteConfig": {
+          "linuxFxVersion": "NODE|20-lts",
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2",
+          "http20Enabled": true,
+          "alwaysOn": "[and(not(equals(parameters('appServiceSku'), 'B1')), not(equals(parameters('appServiceSku'), 'F1')))]"
+        },
+        "virtualNetworkSubnetId": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2023-05-01').subnets[0].id]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('privateEndpointName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "subnet": {
+          "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2023-05-01').subnets[0].id]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[variables('privateEndpointName')]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Web/sites', variables('appServiceName'))]",
+              "groupIds": [
+                "sites"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('appServiceName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', variables('privateEndpointName'), 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "config1",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', variables('privateEndpointName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group name"
+      },
+      "value": "[resourceGroup().name]"
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group location"
+      },
+      "value": "[parameters('location')]"
+    },
+    "appServiceName": {
+      "type": "string",
+      "metadata": {
+        "description": "App Service name"
+      },
+      "value": "[variables('appServiceName')]"
+    },
+    "webAppUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Web App URL (public endpoint - disabled)"
+      },
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('appServiceName')), '2023-01-01').defaultHostName)]"
+    },
+    "webAppPrivateIp": {
+      "type": "string",
+      "metadata": {
+        "description": "Web App private IP address"
+      },
+      "value": "[reference(resourceId('Microsoft.Network/privateEndpoints', variables('privateEndpointName')), '2023-05-01').customDnsConfigs[0].ipAddresses[0]]"
+    },
+    "vnetId": {
+      "type": "string",
+      "metadata": {
+        "description": "Virtual Network ID"
+      },
+      "value": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+    },
+    "deployedResources": {
+      "type": "array",
+      "metadata": {
+        "description": "List of deployed resources"
+      },
+      "value": [
+        {
+          "type": "Microsoft.Web/serverfarms",
+          "name": "[variables('appServicePlanName')]",
+          "id": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"
+        },
+        {
+          "type": "Microsoft.Web/sites",
+          "name": "[variables('appServiceName')]",
+          "id": "[resourceId('Microsoft.Web/sites', variables('appServiceName'))]"
+        },
+        {
+          "type": "Microsoft.Network/virtualNetworks",
+          "name": "[variables('vnetName')]",
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+        },
+        {
+          "type": "Microsoft.Network/privateEndpoints",
+          "name": "[variables('privateEndpointName')]",
+          "id": "[resourceId('Microsoft.Network/privateEndpoints', variables('privateEndpointName'))]"
+        }
+      ]
+    },
+    "deploymentTimestamp": {
+      "type": "string",
+      "metadata": {
+        "description": "Deployment timestamp"
+      },
+      "value": "[parameters('deploymentTime')]"
+    }
+  }
+}

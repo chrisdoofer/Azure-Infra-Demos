@@ -1,0 +1,342 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "6975431513303688770"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for deployment"
+      }
+    },
+    "prefix": {
+      "type": "string",
+      "defaultValue": "demo",
+      "metadata": {
+        "description": "Prefix for resource naming"
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "owner": "pattern-demo",
+        "workload": "azure-monitor-baseline",
+        "environment": "demo",
+        "ttlHours": "24"
+      },
+      "metadata": {
+        "description": "Resource tags"
+      }
+    },
+    "retentionDays": {
+      "type": "int",
+      "defaultValue": 30,
+      "metadata": {
+        "description": "Log Analytics retention in days"
+      }
+    },
+    "alertEmail": {
+      "type": "string",
+      "defaultValue": "alerts@example.com",
+      "metadata": {
+        "description": "Alert notification email address"
+      }
+    },
+    "dailyQuotaGb": {
+      "type": "int",
+      "defaultValue": 1,
+      "metadata": {
+        "description": "Daily data ingestion cap in GB"
+      }
+    },
+    "deploymentTime": {
+      "type": "string",
+      "defaultValue": "[utcNow('u')]",
+      "metadata": {
+        "description": "Deployment timestamp"
+      }
+    }
+  },
+  "variables": {
+    "resourceSuffix": "[format('{0}-{1}', parameters('prefix'), uniqueString(resourceGroup().id))]",
+    "commonTags": "[union(parameters('tags'), createObject('deployedAt', parameters('deploymentTime'), 'pattern', 'azure-monitor-baseline'))]",
+    "logAnalyticsName": "[format('log-{0}', variables('resourceSuffix'))]",
+    "appInsightsName": "[format('appi-{0}', variables('resourceSuffix'))]",
+    "actionGroupName": "[format('ag-{0}', variables('resourceSuffix'))]",
+    "alertRuleName": "[format('alert-{0}', variables('resourceSuffix'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2022-10-01",
+      "name": "[variables('logAnalyticsName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": "[parameters('retentionDays')]",
+        "workspaceCapping": {
+          "dailyQuotaGb": "[parameters('dailyQuotaGb')]"
+        },
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "RetentionInDays": "[parameters('retentionDays')]",
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/actionGroups",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('actionGroupName')]",
+      "location": "global",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "groupShortName": "[substring(variables('actionGroupName'), 0, 12)]",
+        "enabled": true,
+        "emailReceivers": [
+          {
+            "name": "EmailAlert",
+            "emailAddress": "[parameters('alertEmail')]",
+            "useCommonAlertSchema": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Insights/metricAlerts",
+      "apiVersion": "2018-03-01",
+      "name": "[format('{0}-dataingestion', variables('alertRuleName'))]",
+      "location": "global",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "description": "Alert when Log Analytics workspace data ingestion exceeds 5 GB/day",
+        "severity": 2,
+        "enabled": true,
+        "scopes": [
+          "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+        ],
+        "evaluationFrequency": "PT1H",
+        "windowSize": "PT1H",
+        "criteria": {
+          "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+          "allOf": [
+            {
+              "name": "DataIngestion",
+              "metricName": "Usage",
+              "dimensions": [],
+              "operator": "GreaterThan",
+              "threshold": 5000,
+              "timeAggregation": "Total"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', variables('actionGroupName'))]"
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/actionGroups', variables('actionGroupName'))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2023-03-15-preview",
+      "name": "[format('{0}-errors', variables('alertRuleName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "displayName": "Error Rate Spike Detection",
+        "description": "Alert when error rate exceeds 10% of total requests in the last hour",
+        "severity": 2,
+        "enabled": true,
+        "scopes": [
+          "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+        ],
+        "evaluationFrequency": "PT15M",
+        "windowSize": "PT1H",
+        "criteria": {
+          "allOf": [
+            {
+              "query": "AppRequests | summarize Total = count(), Errors = countif(Success == false) | extend ErrorRate = todouble(Errors) / todouble(Total) * 100 | where ErrorRate > 10",
+              "timeAggregation": "Count",
+              "dimensions": [],
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[resourceId('Microsoft.Insights/actionGroups', variables('actionGroupName'))]"
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/actionGroups', variables('actionGroupName'))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/workbooks",
+      "apiVersion": "2023-06-01",
+      "name": "[guid(resourceGroup().id, 'monitoring-workbook')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "kind": "shared",
+      "properties": {
+        "displayName": "Azure Monitor Baseline Dashboard",
+        "description": "Overview dashboard for monitoring baseline metrics",
+        "category": "sentinel",
+        "serializedData": "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"## Azure Monitor Baseline\\n\\nOverview of Log Analytics workspace and Application Insights metrics\"},\"name\":\"text - 0\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"Usage | summarize DataIngestion = sum(Quantity) by bin(TimeGenerated, 1h) | order by TimeGenerated desc\",\"size\":0,\"title\":\"Data Ingestion (Last 24 Hours)\",\"timeContext\":{\"durationMs\":86400000},\"queryType\":0,\"resourceType\":\"microsoft.operationalinsights/workspaces\"},\"name\":\"query - 1\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AppRequests | summarize TotalRequests = count(), FailedRequests = countif(Success == false) by bin(TimeGenerated, 1h) | extend SuccessRate = (TotalRequests - FailedRequests) * 100.0 / TotalRequests | project TimeGenerated, SuccessRate\",\"size\":0,\"title\":\"Request Success Rate (%)\",\"timeContext\":{\"durationMs\":86400000},\"queryType\":0,\"resourceType\":\"microsoft.insights/components\"},\"name\":\"query - 2\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"AppDependencies | summarize AvgDuration = avg(DurationMs) by bin(TimeGenerated, 1h) | order by TimeGenerated desc\",\"size\":0,\"title\":\"Average Dependency Duration (ms)\",\"timeContext\":{\"durationMs\":86400000},\"queryType\":0,\"resourceType\":\"microsoft.insights/components\"},\"name\":\"query - 3\"}],\"styleSettings\":{},\"fromTemplateId\":\"sentinel-UserWorkbook\"}",
+        "sourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.OperationalInsights/workspaces/{0}', variables('logAnalyticsName'))]",
+      "name": "workspace-diagnostics",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "logs": [
+          {
+            "categoryGroup": "allLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group name"
+      },
+      "value": "[resourceGroup().name]"
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group location"
+      },
+      "value": "[parameters('location')]"
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics Workspace ID"
+      },
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+    },
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics Workspace Name"
+      },
+      "value": "[variables('logAnalyticsName')]"
+    },
+    "appInsightsInstrumentationKey": {
+      "type": "string",
+      "metadata": {
+        "description": "Application Insights Instrumentation Key"
+      },
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').InstrumentationKey]"
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "metadata": {
+        "description": "Application Insights Connection String"
+      },
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
+    },
+    "actionGroupId": {
+      "type": "string",
+      "metadata": {
+        "description": "Action Group ID"
+      },
+      "value": "[resourceId('Microsoft.Insights/actionGroups', variables('actionGroupName'))]"
+    },
+    "workbookId": {
+      "type": "string",
+      "metadata": {
+        "description": "Workbook ID"
+      },
+      "value": "[resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, 'monitoring-workbook'))]"
+    },
+    "deployedResources": {
+      "type": "array",
+      "metadata": {
+        "description": "List of deployed resources"
+      },
+      "value": [
+        {
+          "type": "Microsoft.OperationalInsights/workspaces",
+          "name": "[variables('logAnalyticsName')]",
+          "id": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+        },
+        {
+          "type": "Microsoft.Insights/components",
+          "name": "[variables('appInsightsName')]",
+          "id": "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
+        },
+        {
+          "type": "Microsoft.Insights/actionGroups",
+          "name": "[variables('actionGroupName')]",
+          "id": "[resourceId('Microsoft.Insights/actionGroups', variables('actionGroupName'))]"
+        }
+      ]
+    },
+    "deploymentTimestamp": {
+      "type": "string",
+      "metadata": {
+        "description": "Deployment timestamp"
+      },
+      "value": "[parameters('deploymentTime')]"
+    }
+  }
+}

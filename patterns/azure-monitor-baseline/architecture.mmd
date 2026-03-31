@@ -1,22 +1,25 @@
 graph TB
-    subgraph "Azure Resources"
+    subgraph "Azure Resources (Monitored)"
         VM[Virtual Machines]
         APP[App Services]
         DB[Databases]
-        STG[Storage]
+        STG[Storage Accounts]
     end
     
-    subgraph "Azure Monitor"
-        LA[Log Analytics<br/>Workspace]
-        AI[Application<br/>Insights]
-        AG[Action Group]
-        ALERT[Metric Alerts]
+    subgraph "Azure Monitor Baseline"
+        LA[Log Analytics<br/>Workspace<br/>30-day retention]
+        AI[Application<br/>Insights<br/>Connected to LA]
+        WB[Azure Monitor<br/>Workbook<br/>Custom Dashboard]
+    end
+    
+    subgraph "Alert Configuration"
+        AG[Action Group<br/>Email Notification]
+        ALERT1[Metric Alert<br/>Data Ingestion > 5GB/day]
+        ALERT2[Query Alert<br/>Error Rate > 10%]
     end
     
     subgraph "Notification Channels"
-        EMAIL[Email]
-        SMS[SMS]
-        WEBHOOK[Webhook]
+        EMAIL[Email Alert]
     end
     
     VM -->|Logs & Metrics| LA
@@ -27,17 +30,20 @@ graph TB
     APP -->|Telemetry| AI
     AI -->|Data| LA
     
-    LA -->|Trigger| ALERT
-    ALERT -->|Notify| AG
+    LA -->|Query Data| WB
+    LA -->|Trigger Conditions| ALERT1
+    LA -->|Trigger Conditions| ALERT2
+    ALERT1 -->|Notify| AG
+    ALERT2 -->|Notify| AG
     
     AG --> EMAIL
-    AG --> SMS
-    AG --> WEBHOOK
     
     classDef azureService fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
     classDef monitor fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
-    classDef notify fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    classDef alert fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    classDef notify fill:#E81123,stroke:#000,stroke-width:2px,color:#fff
     
     class VM,APP,DB,STG azureService
-    class LA,AI,AG,ALERT monitor
-    class EMAIL,SMS,WEBHOOK notify
+    class LA,AI,WB monitor
+    class AG,ALERT1,ALERT2 alert
+    class EMAIL notify

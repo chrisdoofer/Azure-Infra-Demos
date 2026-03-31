@@ -103,18 +103,18 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
 }
 
 resource metricAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
-  name: alertRuleName
+  name: '${alertRuleName}-dataingestion'
   location: 'global'
   tags: commonTags
   properties: {
-    description: 'Alert when Log Analytics workspace data ingestion exceeds threshold'
+    description: 'Alert when Log Analytics workspace data ingestion exceeds 5 GB/day'
     severity: 2
     enabled: true
     scopes: [
       logAnalyticsWorkspace.id
     ]
-    evaluationFrequency: 'PT5M'
-    windowSize: 'PT5M'
+    evaluationFrequency: 'PT1H'
+    windowSize: 'PT1H'
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
       allOf: [
@@ -123,7 +123,7 @@ resource metricAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
           metricName: 'Usage'
           dimensions: []
           operator: 'GreaterThan'
-          threshold: 100
+          threshold: 5000
           timeAggregation: 'Total'
         }
       ]
@@ -133,6 +133,62 @@ resource metricAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
         actionGroupId: actionGroup.id
       }
     ]
+  }
+}
+
+// Scheduled Query Alert for error rate spike detection
+resource scheduledQueryAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
+  name: '${alertRuleName}-errors'
+  location: location
+  tags: commonTags
+  properties: {
+    displayName: 'Error Rate Spike Detection'
+    description: 'Alert when error rate exceeds 10% of total requests in the last hour'
+    severity: 2
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspace.id
+    ]
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT1H'
+    criteria: {
+      allOf: [
+        {
+          query: 'AppRequests | summarize Total = count(), Errors = countif(Success == false) | extend ErrorRate = todouble(Errors) / todouble(Total) * 100 | where ErrorRate > 10'
+          timeAggregation: 'Count'
+          dimensions: []
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        actionGroup.id
+      ]
+    }
+  }
+}
+
+// ============================================================================
+// WORKBOOK
+// ============================================================================
+
+resource workbook 'Microsoft.Insights/workbooks@2023-06-01' = {
+  name: guid(resourceGroup().id, 'monitoring-workbook')
+  location: location
+  tags: commonTags
+  kind: 'shared'
+  properties: {
+    displayName: 'Azure Monitor Baseline Dashboard'
+    description: 'Overview dashboard for monitoring baseline metrics'
+    category: 'sentinel'
+    serializedData: '{"version":"Notebook/1.0","items":[{"type":1,"content":{"json":"## Azure Monitor Baseline\\n\\nOverview of Log Analytics workspace and Application Insights metrics"},"name":"text - 0"},{"type":3,"content":{"version":"KqlItem/1.0","query":"Usage | summarize DataIngestion = sum(Quantity) by bin(TimeGenerated, 1h) | order by TimeGenerated desc","size":0,"title":"Data Ingestion (Last 24 Hours)","timeContext":{"durationMs":86400000},"queryType":0,"resourceType":"microsoft.operationalinsights/workspaces"},"name":"query - 1"},{"type":3,"content":{"version":"KqlItem/1.0","query":"AppRequests | summarize TotalRequests = count(), FailedRequests = countif(Success == false) by bin(TimeGenerated, 1h) | extend SuccessRate = (TotalRequests - FailedRequests) * 100.0 / TotalRequests | project TimeGenerated, SuccessRate","size":0,"title":"Request Success Rate (%)","timeContext":{"durationMs":86400000},"queryType":0,"resourceType":"microsoft.insights/components"},"name":"query - 2"},{"type":3,"content":{"version":"KqlItem/1.0","query":"AppDependencies | summarize AvgDuration = avg(DurationMs) by bin(TimeGenerated, 1h) | order by TimeGenerated desc","size":0,"title":"Average Dependency Duration (ms)","timeContext":{"durationMs":86400000},"queryType":0,"resourceType":"microsoft.insights/components"},"name":"query - 3"}],"styleSettings":{},"fromTemplateId":"sentinel-UserWorkbook"}'
+    sourceId: logAnalyticsWorkspace.id
   }
 }
 
@@ -184,6 +240,9 @@ output appInsightsConnectionString string = applicationInsights.properties.Conne
 
 @description('Action Group ID')
 output actionGroupId string = actionGroup.id
+
+@description('Workbook ID')
+output workbookId string = workbook.id
 
 @description('List of deployed resources')
 output deployedResources array = [

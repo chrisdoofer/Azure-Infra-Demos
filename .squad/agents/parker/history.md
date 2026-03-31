@@ -52,3 +52,18 @@
 - **Pattern Detail Page:** Updated to pass templatePath (not templateUri) to DeployButton component
 - **All 8 Patterns Migrated:** hub-spoke-network (ready), plus 7 scaffold patterns all using new templatePath schema
 
+### 2026-03-31: Wave 1 Infrastructure Complete - Three Production-Ready Patterns
+- **Deliverables:** Implemented complete, deployable Bicep templates for 3 Wave 1 patterns (serverless-api, web-app-private-endpoint, azure-monitor-baseline)
+- **Quality Bar:** All patterns match hub-spoke-network reference implementation quality with complete resource definitions, no TODOs, valid Bicep syntax
+- **Pattern 1 - Serverless API:** Azure Functions (Consumption, Linux), API Management (Consumption), Cosmos DB (serverless), Key Vault, Application Insights, Storage Account. Features: managed identity, Key Vault secret storage for Cosmos connection, APIM API/operation definitions with backend policy, multi-runtime support (Node.js 20, Python, .NET)
+- **Pattern 2 - Web App Private Endpoint:** App Service (B1 Linux, Node.js 20 LTS), VNet with 2 subnets (app integration with delegation, private endpoint subnet), NSG, Private Endpoint, Private DNS Zone. Features: VNet integration, public access disabled, HTTPS only, TLS 1.2 minimum, alwaysOn for non-Basic SKUs
+- **Pattern 3 - Azure Monitor Baseline:** Log Analytics workspace (30-day retention, 5GB daily cap), Application Insights, Action Group (email), Metric Alert (data ingestion >5GB), Scheduled Query Alert (error rate >10%), Azure Monitor Workbook with 3 dashboard sections
+- **ARM JSON Generation:** All 3 patterns compiled to valid ARM JSON (azuredeploy.json) for Azure Portal Deploy buttons - serverless-api (18KB), web-app-private-endpoint (12KB), azure-monitor-baseline (13KB)
+- **Parameters Updated:** Cost-efficient defaults in dev.parameters.json - Node.js 20, B1 SKU (not P1v3), 48-hour TTL, 5GB Log Analytics cap (not 1GB)
+- **Architecture Diagrams:** Updated all 3 architecture.mmd files to accurately reflect deployed resources, include SKU/tier details, show all relationships (VNet integration, Key Vault secrets, alert flows)
+- **Security:** Managed identities, Key Vault access policies, HTTPS-only, minimum TLS 1.2, private endpoints, NSG rules, no public access where applicable
+- **Bicep Validation:** All templates successfully compile with az bicep build (warnings only for API version metadata, no errors)
+- **Resource Naming:** Consistent patterns using `${prefix}-${uniqueString(resourceGroup().id)}` suffix, abbreviations follow Azure CAF standards (func-, apim-, cosmos-, kv-, st, app-, asp-, vnet-, pe-, log-, appi-)
+- **Outputs:** All patterns provide comprehensive outputs (resource IDs, URLs, endpoints, instrumentation keys) matching standardized schema with deployedResources array
+- **Cost Targets:** serverless-api ~$5-15/day (Consumption plans), web-app-private-endpoint ~$20-40/day (B1 tier), azure-monitor-baseline ~$10-25/day (Log Analytics ingestion)
+

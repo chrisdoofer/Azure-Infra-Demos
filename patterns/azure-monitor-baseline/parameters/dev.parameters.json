@@ -15,14 +15,14 @@
       "value": "alerts@example.com"
     },
     "dailyQuotaGb": {
-      "value": 1
+      "value": 5
     },
     "tags": {
       "value": {
         "owner": "pattern-demo",
         "workload": "azure-monitor-baseline",
         "environment": "dev",
-        "ttlHours": "24"
+        "ttlHours": "48"
       }
     }
   }

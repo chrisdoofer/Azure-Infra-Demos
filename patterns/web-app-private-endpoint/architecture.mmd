@@ -1,23 +1,33 @@
 graph TB
-    subgraph "Azure Virtual Network"
-        subgraph "Private Endpoint Subnet"
-            PE[Private Endpoint<br/>10.0.1.4]
+    subgraph "Azure Virtual Network (10.0.0.0/16)"
+        subgraph "App Integration Subnet (10.0.1.0/24)"
+            VNET[VNet Integration<br/>Outbound Traffic]
+        end
+        subgraph "Private Endpoint Subnet (10.0.2.0/24)"
+            PE[Private Endpoint<br/>Inbound Traffic]
+            NSG[Network Security<br/>Group]
         end
         DNS[Private DNS Zone<br/>privatelink.azurewebsites.net]
     end
     
     subgraph "App Service"
-        APP[Web App<br/>Premium Tier]
+        PLAN[App Service Plan<br/>Basic B1<br/>Linux]
+        APP[Web App<br/>Node.js 20 LTS<br/>HTTPS Only]
     end
     
     User[Corporate Network<br/>or VPN User] -->|Private Connection| PE
     PE -->|Private Link| APP
+    APP -->|VNet Integration| VNET
     PE -.->|DNS Resolution| DNS
+    PE --- NSG
+    PLAN --> APP
     
     classDef azureService fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
     classDef network fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
+    classDef security fill:#E81123,stroke:#000,stroke-width:2px,color:#fff
     classDef user fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
     
-    class APP azureService
-    class PE,DNS network
+    class APP,PLAN azureService
+    class PE,DNS,VNET network
+    class NSG security
     class User user

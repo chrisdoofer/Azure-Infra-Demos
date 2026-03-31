@@ -15,14 +15,17 @@ param tags object = {
   ttlHours: '24'
 }
 
-@description('App Service Plan SKU')
-param appServicePlanSku string = 'P1v3'
+@description('App Service Plan SKU (B1, B2, B3, S1, S2, S3, P1v2, P1v3)')
+param appServiceSku string = 'B1'
 
 @description('Virtual Network address prefix')
 param vnetAddressPrefix string = '10.0.0.0/16'
 
+@description('App integration subnet address prefix')
+param appSubnetPrefix string = '10.0.1.0/24'
+
 @description('Private Endpoint subnet address prefix')
-param privateEndpointSubnetPrefix string = '10.0.1.0/24'
+param privateEndpointSubnetPrefix string = '10.0.2.0/24'
 
 @description('Deployment timestamp')
 param deploymentTime string = utcNow('u')
@@ -42,11 +45,48 @@ var appServicePlanName = 'asp-${resourceSuffix}'
 var vnetName = 'vnet-${resourceSuffix}'
 var privateEndpointName = 'pe-${resourceSuffix}'
 var privateDnsZoneName = 'privatelink.azurewebsites.net'
-var nicName = 'nic-${resourceSuffix}'
+var nsgName = 'nsg-${resourceSuffix}'
 
 // ============================================================================
 // NETWORKING
 // ============================================================================
+
+// NSG for Private Endpoint subnet
+resource nsg 'Microsoft.Network/networkSecurityGroups@2023-05-01' = {
+  name: nsgName
+  location: location
+  tags: commonTags
+  properties: {
+    securityRules: [
+      {
+        name: 'AllowVnetInbound'
+        properties: {
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 100
+          direction: 'Inbound'
+        }
+      }
+      {
+        name: 'DenyAllInbound'
+        properties: {
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+          access: 'Deny'
+          priority: 4096
+          direction: 'Inbound'
+        }
+      }
+    ]
+  }
+}
 
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2023-05-01' = {
   name: vnetName
@@ -60,9 +100,27 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2023-05-01' = {
     }
     subnets: [
       {
+        name: 'AppIntegrationSubnet'
+        properties: {
+          addressPrefix: appSubnetPrefix
+          delegations: [
+            {
+              name: 'appServiceDelegation'
+              properties: {
+                serviceName: 'Microsoft.Web/serverFarms'
+              }
+            }
+          ]
+          privateEndpointNetworkPolicies: 'Enabled'
+        }
+      }
+      {
         name: 'PrivateEndpointSubnet'
         properties: {
           addressPrefix: privateEndpointSubnetPrefix
+          networkSecurityGroup: {
+            id: nsg.id
+          }
           privateEndpointNetworkPolicies: 'Disabled'
         }
       }
@@ -97,8 +155,8 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   location: location
   tags: commonTags
   sku: {
-    name: appServicePlanSku
-    tier: 'PremiumV3'
+    name: appServiceSku
+    tier: appServiceSku == 'B1' || appServiceSku == 'B2' || appServiceSku == 'B3' ? 'Basic' : (appServiceSku == 'S1' || appServiceSku == 'S2' || appServiceSku == 'S3' ? 'Standard' : 'PremiumV2')
   }
   kind: 'linux'
   properties: {
@@ -115,11 +173,13 @@ resource appService 'Microsoft.Web/sites@2023-01-01' = {
     httpsOnly: true
     publicNetworkAccess: 'Disabled'
     siteConfig: {
-      linuxFxVersion: 'NODE|18-lts'
+      linuxFxVersion: 'NODE|20-lts'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       http20Enabled: true
+      alwaysOn: appServiceSku != 'B1' && appServiceSku != 'F1'
     }
+    virtualNetworkSubnetId: virtualNetwork.properties.subnets[0].id
   }
 }
 
@@ -177,11 +237,14 @@ output location string = location
 @description('App Service name')
 output appServiceName string = appService.name
 
-@description('App Service default hostname')
-output appServiceHostname string = appService.properties.defaultHostName
+@description('Web App URL (public endpoint - disabled)')
+output webAppUrl string = 'https://${appService.properties.defaultHostName}'
 
-@description('Private Endpoint IP address')
-output privateEndpointIp string = privateEndpoint.properties.customDnsConfigs[0].ipAddresses[0]
+@description('Web App private IP address')
+output webAppPrivateIp string = privateEndpoint.properties.customDnsConfigs[0].ipAddresses[0]
+
+@description('Virtual Network ID')
+output vnetId string = virtualNetwork.id
 
 @description('List of deployed resources')
 output deployedResources array = [
