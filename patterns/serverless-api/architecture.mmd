@@ -1,0 +1,28 @@
+graph TB
+    Client[API Client] -->|HTTPS| APIM[API Management<br/>Gateway]
+    
+    subgraph "Serverless Backend"
+        APIM -->|Route| FUNC[Azure Functions<br/>Consumption Plan]
+        FUNC -->|Read/Write| COSMOS[Cosmos DB<br/>NoSQL Database]
+        FUNC -->|Get Secrets| KV[Key Vault<br/>Secrets]
+        FUNC -->|Telemetry| AI[Application<br/>Insights]
+    end
+    
+    subgraph "Supporting Services"
+        FUNC -->|File Storage| STORAGE[Storage Account]
+        AI -->|Logs| LA[Log Analytics]
+    end
+    
+    classDef gateway fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    classDef compute fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
+    classDef data fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
+    classDef security fill:#E81123,stroke:#000,stroke-width:2px,color:#fff
+    classDef monitor fill:#00BCF2,stroke:#000,stroke-width:2px,color:#000
+    classDef user fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
+    
+    class APIM gateway
+    class FUNC compute
+    class COSMOS,STORAGE data
+    class KV security
+    class AI,LA monitor
+    class Client user

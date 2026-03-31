@@ -1,0 +1,23 @@
+graph TB
+    subgraph "Azure Virtual Network"
+        subgraph "Private Endpoint Subnet"
+            PE[Private Endpoint<br/>10.0.1.4]
+        end
+        DNS[Private DNS Zone<br/>privatelink.azurewebsites.net]
+    end
+    
+    subgraph "App Service"
+        APP[Web App<br/>Premium Tier]
+    end
+    
+    User[Corporate Network<br/>or VPN User] -->|Private Connection| PE
+    PE -->|Private Link| APP
+    PE -.->|DNS Resolution| DNS
+    
+    classDef azureService fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
+    classDef network fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
+    classDef user fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
+    
+    class APP azureService
+    class PE,DNS network
+    class User user

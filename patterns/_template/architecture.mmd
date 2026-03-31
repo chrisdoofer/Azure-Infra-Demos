@@ -1,0 +1,18 @@
+graph TB
+    subgraph "Azure Subscription"
+        subgraph "Resource Group"
+            Component1[Component 1]
+            Component2[Component 2]
+            Component3[Component 3]
+        end
+    end
+
+    User[User/Client] --> Component1
+    Component1 --> Component2
+    Component2 --> Component3
+
+    classDef azureService fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
+    classDef user fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
+    
+    class Component1,Component2,Component3 azureService
+    class User user

@@ -1,0 +1,14 @@
+{
+  "name": "@azure-infra-demos/tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pattern management and validation tools",
+  "scripts": {
+    "catalog": "tsx catalog-builder.ts",
+    "validate": "tsx validate-patterns.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

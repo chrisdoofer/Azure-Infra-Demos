@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "prefix": {
+      "value": "demo"
+    },
+    "storageSku": {
+      "value": "Standard_LRS"
+    },
+    "synapseSqlPoolSku": {
+      "value": "DW100c"
+    },
+    "deploySqlPool": {
+      "value": false
+    },
+    "sqlAdministratorLogin": {
+      "value": "sqladmin"
+    },
+    "sqlAdministratorPassword": {
+      "value": "REPLACE_WITH_SECURE_PASSWORD"
+    },
+    "tags": {
+      "value": {
+        "owner": "pattern-demo",
+        "workload": "data-analytics-pipeline",
+        "environment": "dev",
+        "ttlHours": "24"
+      }
+    }
+  }
+}

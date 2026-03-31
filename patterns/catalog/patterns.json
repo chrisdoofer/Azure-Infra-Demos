@@ -1,0 +1,191 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2026-03-31",
+  "patterns": [
+    {
+      "id": "hub-spoke-network",
+      "slug": "hub-spoke-network",
+      "title": "Hub-Spoke Network Topology",
+      "summary": "A centralised network architecture where a hub virtual network acts as the connectivity focal point for multiple spoke virtual networks. Enables shared services, security inspection through Azure Firewall, and simplified network management for enterprise workloads.",
+      "sourceUrl": "https://learn.microsoft.com/azure/architecture/networking/architecture/hub-spoke",
+      "category": "networking",
+      "tags": ["networking", "hub-spoke", "firewall", "vpn", "enterprise", "security"],
+      "primaryServices": ["Virtual Network", "Azure Firewall", "VPN Gateway", "Route Tables", "Network Security Groups"],
+      "estimatedCostBand": "medium",
+      "complexity": 3,
+      "typicalDeployTimeMinutes": 15,
+      "deploymentModesSupported": ["portal", "actions"],
+      "templatePath": "patterns/hub-spoke-network/azuredeploy.json",
+      "actionsWorkflowInputsExample": {
+        "subscriptionId": "your-subscription-id",
+        "location": "australiaeast",
+        "prefix": "demo",
+        "patternSlug": "hub-spoke-network"
+      },
+      "status": "implemented",
+      "lastReviewedDate": "2026-03-31"
+    },
+    {
+      "id": "ntier-web-app",
+      "slug": "ntier-web-app",
+      "title": "N-Tier Web Application",
+      "summary": "A layered web application architecture separating presentation, business logic, and data tiers into independent scalable components. Promotes modularity, simplifies maintenance, and enables independent scaling of each tier based on demand.",
+      "sourceUrl": "https://learn.microsoft.com/azure/architecture/guide/architecture-styles/n-tier",
+      "category": "web",
+      "tags": ["n-tier", "web-app", "app-service", "sql-database", "layered-architecture"],
+      "primaryServices": ["App Service", "Azure SQL Database", "Virtual Network", "Application Gateway", "Azure Cache for Redis"],
+      "estimatedCostBand": "medium",
+      "complexity": 3,
+      "typicalDeployTimeMinutes": 20,
+      "deploymentModesSupported": ["portal", "actions"],
+      "templatePath": "patterns/ntier-web-app/azuredeploy.json",
+      "actionsWorkflowInputsExample": {
+        "subscriptionId": "your-subscription-id",
+        "location": "australiaeast",
+        "prefix": "demo",
+        "patternSlug": "ntier-web-app"
+      },
+      "status": "scaffold",
+      "lastReviewedDate": "2026-03-31"
+    },
+    {
+      "id": "microservices-aks",
+      "slug": "microservices-aks",
+      "title": "Microservices on Azure Kubernetes Service",
+      "summary": "A containerised microservices architecture running on AKS with independent deployment, scaling, and lifecycle management for each service. Uses API Gateway pattern for routing, Azure Service Bus for asynchronous messaging, and Azure Container Registry for secure image storage.",
+      "sourceUrl": "https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks-microservices/aks-microservices",
+      "category": "containers",
+      "tags": ["microservices", "aks", "kubernetes", "containers", "api-gateway", "service-bus"],
+      "primaryServices": ["Azure Kubernetes Service", "Azure Container Registry", "Application Gateway", "Azure Service Bus", "Azure Monitor"],
+      "estimatedCostBand": "high",
+      "complexity": 5,
+      "typicalDeployTimeMinutes": 30,
+      "deploymentModesSupported": ["portal", "actions"],
+      "templatePath": "patterns/microservices-aks/azuredeploy.json",
+      "actionsWorkflowInputsExample": {
+        "subscriptionId": "your-subscription-id",
+        "location": "australiaeast",
+        "prefix": "demo",
+        "patternSlug": "microservices-aks"
+      },
+      "status": "scaffold",
+      "lastReviewedDate": "2026-03-31"
+    },
+    {
+      "id": "event-driven-architecture",
+      "slug": "event-driven-architecture",
+      "title": "Event-Driven Architecture",
+      "summary": "A loosely-coupled architecture where services communicate through asynchronous events via Azure Event Grid and Service Bus. Enables real-time processing, decoupled service integration, and scalable event handling for distributed systems.",
+      "sourceUrl": "https://learn.microsoft.com/azure/architecture/guide/architecture-styles/event-driven",
+      "category": "integration",
+      "tags": ["event-driven", "event-grid", "service-bus", "functions", "real-time", "messaging"],
+      "primaryServices": ["Event Grid", "Azure Service Bus", "Azure Functions", "Logic Apps", "Cosmos DB"],
+      "estimatedCostBand": "low",
+      "complexity": 3,
+      "typicalDeployTimeMinutes": 15,
+      "deploymentModesSupported": ["portal", "actions"],
+      "templatePath": "patterns/event-driven-architecture/azuredeploy.json",
+      "actionsWorkflowInputsExample": {
+        "subscriptionId": "your-subscription-id",
+        "location": "australiaeast",
+        "prefix": "demo",
+        "patternSlug": "event-driven-architecture"
+      },
+      "status": "scaffold",
+      "lastReviewedDate": "2026-03-31"
+    },
+    {
+      "id": "static-web-functions-api",
+      "slug": "static-web-functions-api",
+      "title": "Static Web App with Functions API",
+      "summary": "A serverless web application pattern combining Azure Static Web Apps for global frontend hosting with Azure Functions for backend API logic. Delivers low-latency static content worldwide while providing scalable serverless compute for dynamic operations.",
+      "sourceUrl": "https://learn.microsoft.com/azure/architecture/web-apps/guides/reliable-web-app/dotnet/plan-implementation",
+      "category": "serverless",
+      "tags": ["static-web-apps", "serverless", "functions", "frontend", "api", "jamstack"],
+      "primaryServices": ["Static Web Apps", "Azure Functions", "Azure CDN", "Application Insights", "Azure Storage"],
+      "estimatedCostBand": "low",
+      "complexity": 2,
+      "typicalDeployTimeMinutes": 10,
+      "deploymentModesSupported": ["portal", "actions"],
+      "templatePath": "patterns/static-web-functions-api/azuredeploy.json",
+      "actionsWorkflowInputsExample": {
+        "subscriptionId": "your-subscription-id",
+        "location": "australiaeast",
+        "prefix": "demo",
+        "patternSlug": "static-web-functions-api"
+      },
+      "status": "scaffold",
+      "lastReviewedDate": "2026-03-31"
+    },
+    {
+      "id": "azure-landing-zone-small",
+      "slug": "azure-landing-zone-small",
+      "title": "Azure Landing Zone - Small Enterprise",
+      "summary": "A foundational Azure environment setup providing governance, security, and networking best practices for small-to-medium enterprises. Includes subscription organisation, policy enforcement, management groups, and core shared services for scalable cloud adoption.",
+      "sourceUrl": "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/",
+      "category": "management",
+      "tags": ["landing-zone", "governance", "caf", "cloud-adoption", "management-groups", "policy"],
+      "primaryServices": ["Management Groups", "Azure Policy", "Azure Blueprints", "Virtual Network", "Log Analytics"],
+      "estimatedCostBand": "low",
+      "complexity": 4,
+      "typicalDeployTimeMinutes": 25,
+      "deploymentModesSupported": ["portal", "actions"],
+      "templatePath": "patterns/azure-landing-zone-small/azuredeploy.json",
+      "actionsWorkflowInputsExample": {
+        "subscriptionId": "your-subscription-id",
+        "location": "australiaeast",
+        "prefix": "demo",
+        "patternSlug": "azure-landing-zone-small"
+      },
+      "status": "scaffold",
+      "lastReviewedDate": "2026-03-31"
+    },
+    {
+      "id": "data-lake-analytics",
+      "slug": "data-lake-analytics",
+      "title": "Data Lake Analytics Platform",
+      "summary": "A big data analytics architecture using Azure Data Lake Storage for scalable storage, Azure Synapse Analytics for data warehousing, and Azure Databricks for advanced analytics. Supports batch and streaming data ingestion with comprehensive data governance.",
+      "sourceUrl": "https://learn.microsoft.com/azure/architecture/solution-ideas/articles/data-lake-analytics",
+      "category": "analytics",
+      "tags": ["data-lake", "analytics", "synapse", "databricks", "big-data", "data-warehousing"],
+      "primaryServices": ["Data Lake Storage Gen2", "Synapse Analytics", "Azure Databricks", "Azure Data Factory", "Power BI"],
+      "estimatedCostBand": "high",
+      "complexity": 5,
+      "typicalDeployTimeMinutes": 30,
+      "deploymentModesSupported": ["portal", "actions"],
+      "templatePath": "patterns/data-lake-analytics/azuredeploy.json",
+      "actionsWorkflowInputsExample": {
+        "subscriptionId": "your-subscription-id",
+        "location": "australiaeast",
+        "prefix": "demo",
+        "patternSlug": "data-lake-analytics"
+      },
+      "status": "scaffold",
+      "lastReviewedDate": "2026-03-31"
+    },
+    {
+      "id": "ha-multiregion-web-app",
+      "slug": "ha-multiregion-web-app",
+      "title": "High-Availability Multi-Region Web Application",
+      "summary": "A globally distributed web application architecture deployed across multiple Azure regions with Azure Front Door for global load balancing and failover. Provides low-latency access worldwide, automatic failover during regional outages, and simplified disaster recovery.",
+      "sourceUrl": "https://learn.microsoft.com/azure/architecture/reference-architectures/app-service-web-app/multi-region",
+      "category": "web",
+      "tags": ["high-availability", "multi-region", "front-door", "disaster-recovery", "global", "failover"],
+      "primaryServices": ["Azure Front Door", "App Service", "Azure SQL Database", "Cosmos DB", "Azure Traffic Manager"],
+      "estimatedCostBand": "high",
+      "complexity": 4,
+      "typicalDeployTimeMinutes": 35,
+      "deploymentModesSupported": ["portal", "actions"],
+      "templatePath": "patterns/ha-multiregion-web-app/azuredeploy.json",
+      "actionsWorkflowInputsExample": {
+        "subscriptionId": "your-subscription-id",
+        "primaryLocation": "australiaeast",
+        "secondaryLocation": "australiasoutheast",
+        "prefix": "demo",
+        "patternSlug": "ha-multiregion-web-app"
+      },
+      "status": "scaffold",
+      "lastReviewedDate": "2026-03-31"
+    }
+  ]
+}

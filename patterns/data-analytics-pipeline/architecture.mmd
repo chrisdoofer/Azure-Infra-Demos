@@ -1,0 +1,56 @@
+graph LR
+    subgraph "Data Sources"
+        SRC1[On-Premises DB]
+        SRC2[SaaS Apps]
+        SRC3[IoT Devices]
+    end
+    
+    subgraph "Ingestion Layer"
+        ADF[Azure Data Factory<br/>ETL Pipelines]
+    end
+    
+    subgraph "Storage Layer - Data Lake Gen2"
+        RAW[Raw Zone<br/>Bronze]
+        CURATED[Curated Zone<br/>Silver]
+        ENRICHED[Enriched Zone<br/>Gold]
+    end
+    
+    subgraph "Analytics Layer"
+        SYNAPSE[Synapse Analytics<br/>SQL Pools]
+        SERVERLESS[Serverless SQL]
+        SPARK[Spark Pools]
+    end
+    
+    subgraph "Consumption"
+        POWERBI[Power BI]
+        ML[ML Models]
+        APPS[Applications]
+    end
+    
+    SRC1 -->|Ingest| ADF
+    SRC2 -->|Ingest| ADF
+    SRC3 -->|Ingest| ADF
+    
+    ADF -->|Land| RAW
+    RAW -->|Transform| CURATED
+    CURATED -->|Enrich| ENRICHED
+    
+    ENRICHED -->|Query| SYNAPSE
+    ENRICHED -->|Query| SERVERLESS
+    ENRICHED -->|Process| SPARK
+    
+    SYNAPSE --> POWERBI
+    SYNAPSE --> APPS
+    SPARK --> ML
+    
+    classDef source fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
+    classDef etl fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    classDef storage fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
+    classDef analytics fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
+    classDef consume fill:#E81123,stroke:#000,stroke-width:2px,color:#fff
+    
+    class SRC1,SRC2,SRC3 source
+    class ADF etl
+    class RAW,CURATED,ENRICHED storage
+    class SYNAPSE,SERVERLESS,SPARK analytics
+    class POWERBI,ML,APPS consume

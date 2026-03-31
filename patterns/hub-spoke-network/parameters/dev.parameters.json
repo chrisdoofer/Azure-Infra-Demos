@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "australiaeast"
+    },
+    "prefix": {
+      "value": "dev"
+    },
+    "tags": {
+      "value": {
+        "owner": "dev-team",
+        "workload": "hub-spoke-network",
+        "environment": "dev",
+        "ttlHours": "8"
+      }
+    },
+    "deployFirewall": {
+      "value": true
+    },
+    "deployVpnGateway": {
+      "value": false
+    },
+    "hubAddressPrefix": {
+      "value": "10.0.0.0/16"
+    },
+    "spoke1AddressPrefix": {
+      "value": "10.1.0.0/16"
+    },
+    "spoke2AddressPrefix": {
+      "value": "10.2.0.0/16"
+    }
+  }
+}

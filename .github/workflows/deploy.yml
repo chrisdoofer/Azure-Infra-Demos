@@ -1,0 +1,162 @@
+name: Deploy Pattern to Azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      subscriptionId:
+        description: 'Azure Subscription ID'
+        required: true
+        type: string
+      location:
+        description: 'Azure region'
+        required: true
+        type: string
+        default: 'australiaeast'
+      prefix:
+        description: 'Resource name prefix'
+        required: true
+        type: string
+        default: 'demo'
+      patternSlug:
+        description: 'Pattern directory name (e.g., hub-spoke-network)'
+        required: true
+        type: string
+      resourceGroupName:
+        description: 'Resource group name (optional, auto-generated if not provided)'
+        required: false
+        type: string
+      extraParamsJson:
+        description: 'Additional parameters as JSON (e.g., {"deployFirewall": true})'
+        required: false
+        type: string
+        default: '{}'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Bicep Template
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Azure CLI
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ inputs.subscriptionId }}
+
+      - name: Install Bicep CLI
+        run: |
+          az bicep install
+          az bicep version
+
+      - name: Build Bicep template
+        run: |
+          cd patterns/${{ inputs.patternSlug }}
+          az bicep build --file main.bicep
+          echo "✅ Bicep template is valid"
+
+  deploy:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ inputs.subscriptionId }}
+
+      - name: Set Resource Group Name
+        id: rg
+        run: |
+          if [ -z "${{ inputs.resourceGroupName }}" ]; then
+            RG_NAME="rg-${{ inputs.prefix }}-${{ inputs.patternSlug }}"
+          else
+            RG_NAME="${{ inputs.resourceGroupName }}"
+          fi
+          echo "name=$RG_NAME" >> $GITHUB_OUTPUT
+          echo "📦 Using resource group: $RG_NAME"
+
+      - name: Create Resource Group
+        run: |
+          az group create \
+            --name ${{ steps.rg.outputs.name }} \
+            --location ${{ inputs.location }} \
+            --tags \
+              deployedBy="github-actions" \
+              deployedFrom="Azure-Infra-Demos" \
+              pattern="${{ inputs.patternSlug }}" \
+              runId="${{ github.run_id }}"
+          echo "✅ Resource group created/verified"
+
+      - name: Prepare deployment parameters
+        id: params
+        run: |
+          PARAMS_FILE="patterns/${{ inputs.patternSlug }}/parameters/dev.parameters.json"
+          
+          # Base parameters
+          PARAMS="location=${{ inputs.location }} prefix=${{ inputs.prefix }}"
+          
+          # Add extra parameters if provided
+          EXTRA_JSON='${{ inputs.extraParamsJson }}'
+          if [ "$EXTRA_JSON" != "{}" ]; then
+            # Parse JSON and add to parameters
+            EXTRA_PARAMS=$(echo $EXTRA_JSON | jq -r 'to_entries | map("\(.key)=\(.value)") | join(" ")')
+            PARAMS="$PARAMS $EXTRA_PARAMS"
+          fi
+          
+          echo "parameters=$PARAMS" >> $GITHUB_OUTPUT
+          echo "📋 Deployment parameters: $PARAMS"
+
+      - name: Deploy Bicep template
+        id: deployment
+        run: |
+          DEPLOYMENT_NAME="deploy-${{ inputs.patternSlug }}-$(date +%Y%m%d-%H%M%S)"
+          
+          az deployment group create \
+            --name "$DEPLOYMENT_NAME" \
+            --resource-group ${{ steps.rg.outputs.name }} \
+            --template-file patterns/${{ inputs.patternSlug }}/main.bicep \
+            --parameters ${{ steps.params.outputs.parameters }} \
+            --query properties.outputs \
+            --output json > deployment-outputs.json
+          
+          echo "deployment_name=$DEPLOYMENT_NAME" >> $GITHUB_OUTPUT
+          echo "✅ Deployment completed successfully"
+
+      - name: Display Outputs
+        run: |
+          echo "## 🎉 Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Resource Group:** \`${{ steps.rg.outputs.name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Location:** \`${{ inputs.location }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Pattern:** \`${{ inputs.patternSlug }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Outputs" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          cat deployment-outputs.json >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Teardown Command" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "az group delete --name ${{ steps.rg.outputs.name }} --yes --no-wait" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Or use the [destroy workflow](${{ github.server_url }}/${{ github.repository }}/actions/workflows/destroy.yml)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload deployment outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-outputs-${{ github.run_id }}
+          path: deployment-outputs.json
+          retention-days: 7

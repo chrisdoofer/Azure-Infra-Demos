@@ -1,0 +1,112 @@
+name: Destroy Azure Resources
+
+on:
+  workflow_dispatch:
+    inputs:
+      subscriptionId:
+        description: 'Azure Subscription ID'
+        required: true
+        type: string
+      patternSlug:
+        description: 'Pattern directory name (for reference/logging)'
+        required: true
+        type: string
+      resourceGroupName:
+        description: 'Resource group name to delete'
+        required: true
+        type: string
+      deleteResourceGroup:
+        description: 'Delete entire resource group'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    name: Destroy Resources
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ inputs.subscriptionId }}
+
+      - name: Verify resource group exists
+        id: verify
+        run: |
+          if az group show --name ${{ inputs.resourceGroupName }} &>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Resource group exists: ${{ inputs.resourceGroupName }}"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Resource group not found: ${{ inputs.resourceGroupName }}"
+          fi
+
+      - name: List resources to be deleted
+        if: steps.verify.outputs.exists == 'true'
+        run: |
+          echo "## ⚠️ Resources to be deleted" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Resource Group:** \`${{ inputs.resourceGroupName }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Pattern:** \`${{ inputs.patternSlug }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Resources:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          az resource list \
+            --resource-group ${{ inputs.resourceGroupName }} \
+            --query "[].{Name:name, Type:type, Location:location}" \
+            --output table >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Delete resource group
+        if: steps.verify.outputs.exists == 'true' && inputs.deleteResourceGroup == true
+        run: |
+          echo "🗑️ Deleting resource group: ${{ inputs.resourceGroupName }}"
+          az group delete \
+            --name ${{ inputs.resourceGroupName }} \
+            --yes \
+            --no-wait
+          echo "✅ Deletion initiated (running in background)"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deletion Status" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Resource group deletion initiated. This will complete in the background." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To check status:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "az group show --name ${{ inputs.resourceGroupName }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Pattern-specific cleanup (optional)
+        if: steps.verify.outputs.exists == 'true' && inputs.deleteResourceGroup == false
+        run: |
+          echo "⚙️ Running pattern-specific cleanup for ${{ inputs.patternSlug }}"
+          
+          # Pattern-specific cleanup can be added here
+          # For now, we just list what could be cleaned up individually
+          
+          echo "## ℹ️ Manual Cleanup Required" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full resource group deletion was not requested." >> $GITHUB_STEP_SUMMARY
+          echo "To delete individual resources, use Azure CLI or Portal." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Recommendation:** Delete the entire resource group to ensure all resources are removed:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "az group delete --name ${{ inputs.resourceGroupName }} --yes" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary
+        if: steps.verify.outputs.exists == 'false'
+        run: |
+          echo "## ℹ️ No Action Taken" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Resource group \`${{ inputs.resourceGroupName }}\` does not exist." >> $GITHUB_STEP_SUMMARY
+          echo "No resources were deleted." >> $GITHUB_STEP_SUMMARY

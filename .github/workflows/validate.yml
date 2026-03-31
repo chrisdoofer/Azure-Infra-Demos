@@ -1,0 +1,202 @@
+name: Validate Infrastructure
+
+on:
+  pull_request:
+    paths:
+      - 'patterns/**'
+      - 'portal/**'
+      - '.github/workflows/**'
+      - 'infra/**'
+
+jobs:
+  bicep-lint:
+    name: Validate Bicep Templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az bicep install
+          az bicep version
+
+      - name: Find all Bicep templates
+        id: find-bicep
+        run: |
+          # Find all main.bicep files in patterns directory
+          BICEP_FILES=$(find patterns -name "main.bicep" -type f)
+          echo "Found Bicep templates:"
+          echo "$BICEP_FILES"
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$BICEP_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Validate Bicep templates
+        run: |
+          EXIT_CODE=0
+          
+          echo "## 🔍 Bicep Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          while IFS= read -r file; do
+            if [ -n "$file" ]; then
+              echo "### Validating: \`$file\`" >> $GITHUB_STEP_SUMMARY
+              
+              # Build the template
+              if az bicep build --file "$file" 2>&1 | tee build.log; then
+                echo "✅ Build successful" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "❌ Build failed" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                cat build.log >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                EXIT_CODE=1
+              fi
+              
+              # Lint the template
+              if az bicep lint --file "$file" 2>&1 | tee lint.log; then
+                echo "✅ Lint successful" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "⚠️ Lint warnings/errors" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                cat lint.log >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              fi
+              
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done <<< "${{ steps.find-bicep.outputs.files }}"
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ One or more Bicep templates failed validation"
+            exit 1
+          fi
+          
+          echo "✅ All Bicep templates validated successfully"
+
+  portal-build:
+    name: Build Portal
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./portal
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Check if portal exists
+        id: check-portal
+        run: |
+          if [ -f "package.json" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install dependencies
+        if: steps.check-portal.outputs.exists == 'true'
+        run: npm ci
+
+      - name: Run build
+        if: steps.check-portal.outputs.exists == 'true'
+        run: npm run build
+
+      - name: Portal build summary
+        run: |
+          echo "## 🌐 Portal Build" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check-portal.outputs.exists }}" == "true" ]; then
+            echo "✅ Portal built successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No portal directory found (skipped)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  markdown-lint:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check README files exist
+        run: |
+          echo "## 📚 Documentation Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Find all pattern directories
+          PATTERN_DIRS=$(find patterns -mindepth 1 -maxdepth 1 -type d)
+          
+          for dir in $PATTERN_DIRS; do
+            pattern_name=$(basename "$dir")
+            if [ -f "$dir/README.md" ]; then
+              echo "✅ \`$pattern_name\` - README.md exists" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ \`$pattern_name\` - README.md missing" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+      - name: Check for broken links (basic)
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Link Check" >> $GITHUB_STEP_SUMMARY
+          
+          # Basic check for common broken link patterns in README files
+          READMES=$(find . -name "README.md" -not -path "./node_modules/*")
+          
+          for readme in $READMES; do
+            # Check for empty links
+            if grep -n "\[\]\(" "$readme" > /dev/null 2>&1; then
+              echo "⚠️ Empty link found in \`$readme\`" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # Check for localhost links (should not be in docs)
+            if grep -n "localhost" "$readme" > /dev/null 2>&1; then
+              echo "⚠️ Localhost link found in \`$readme\`" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Basic link validation complete" >> $GITHUB_STEP_SUMMARY
+
+  json-validate:
+    name: Validate JSON Files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate JSON files
+        run: |
+          echo "## 🔧 JSON Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          EXIT_CODE=0
+          
+          # Find all JSON files
+          JSON_FILES=$(find . -name "*.json" -not -path "./node_modules/*" -not -path "./portal/.next/*" -not -path "./portal/build/*")
+          
+          for file in $JSON_FILES; do
+            if python3 -m json.tool "$file" > /dev/null 2>&1; then
+              echo "✅ \`$file\`" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ \`$file\` - Invalid JSON" >> $GITHUB_STEP_SUMMARY
+              EXIT_CODE=1
+            fi
+          done
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ One or more JSON files are invalid"
+            exit 1
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All JSON files are valid"

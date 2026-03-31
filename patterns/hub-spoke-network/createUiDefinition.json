@@ -1,0 +1,202 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "basics": [
+      {
+        "name": "prefix",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Resource Prefix",
+        "defaultValue": "demo",
+        "toolTip": "Prefix used for naming all resources",
+        "constraints": {
+          "required": true,
+          "regex": "^[a-z0-9]{3,10}$",
+          "validationMessage": "Prefix must be 3-10 characters, lowercase alphanumeric only"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "networkConfig",
+        "label": "Network Configuration",
+        "elements": [
+          {
+            "name": "hubAddressPrefix",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Hub VNet Address Space",
+            "defaultValue": "10.0.0.0/16",
+            "toolTip": "CIDR address space for the hub virtual network",
+            "constraints": {
+              "required": true,
+              "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}$",
+              "validationMessage": "Must be a valid CIDR notation (e.g., 10.0.0.0/16)"
+            }
+          },
+          {
+            "name": "spoke1AddressPrefix",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Spoke 1 VNet Address Space",
+            "defaultValue": "10.1.0.0/16",
+            "toolTip": "CIDR address space for the first spoke virtual network",
+            "constraints": {
+              "required": true,
+              "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}$",
+              "validationMessage": "Must be a valid CIDR notation (e.g., 10.1.0.0/16)"
+            }
+          },
+          {
+            "name": "spoke2AddressPrefix",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Spoke 2 VNet Address Space",
+            "defaultValue": "10.2.0.0/16",
+            "toolTip": "CIDR address space for the second spoke virtual network",
+            "constraints": {
+              "required": true,
+              "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}$",
+              "validationMessage": "Must be a valid CIDR notation (e.g., 10.2.0.0/16)"
+            }
+          }
+        ]
+      },
+      {
+        "name": "securityOptions",
+        "label": "Security Options",
+        "elements": [
+          {
+            "name": "deployFirewall",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "Deploy Azure Firewall",
+            "defaultValue": "Yes",
+            "toolTip": "Azure Firewall provides centralized security and traffic inspection. Costs approximately $1.25/hour.",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "Yes",
+                  "value": true
+                },
+                {
+                  "label": "No",
+                  "value": false
+                }
+              ]
+            }
+          },
+          {
+            "name": "deployVpnGateway",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "Deploy VPN Gateway",
+            "defaultValue": "No",
+            "toolTip": "VPN Gateway enables secure connectivity to on-premises networks. Costs approximately $0.19/hour for VpnGw1.",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "Yes",
+                  "value": true
+                },
+                {
+                  "label": "No",
+                  "value": false
+                }
+              ]
+            }
+          },
+          {
+            "name": "costWarning",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Warning",
+              "text": "Azure Firewall and VPN Gateway incur hourly charges. Estimated cost with Firewall only: ~$30/day. With both: ~$35/day. Use the ttlHours tag to enable automatic cleanup.",
+              "uri": "https://azure.microsoft.com/pricing/details/azure-firewall/"
+            }
+          }
+        ]
+      },
+      {
+        "name": "tags",
+        "label": "Tags",
+        "elements": [
+          {
+            "name": "owner",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Owner",
+            "defaultValue": "demo-user",
+            "toolTip": "Owner of these resources for tracking purposes",
+            "constraints": {
+              "required": true
+            }
+          },
+          {
+            "name": "workload",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Workload",
+            "defaultValue": "hub-spoke-network",
+            "toolTip": "Workload name for resource organization",
+            "constraints": {
+              "required": true
+            }
+          },
+          {
+            "name": "environment",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Environment",
+            "defaultValue": "dev",
+            "toolTip": "Environment type for this deployment",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "Development",
+                  "value": "dev"
+                },
+                {
+                  "label": "Test",
+                  "value": "test"
+                },
+                {
+                  "label": "Staging",
+                  "value": "staging"
+                },
+                {
+                  "label": "Production",
+                  "value": "prod"
+                }
+              ]
+            }
+          },
+          {
+            "name": "ttlHours",
+            "type": "Microsoft.Common.TextBox",
+            "label": "TTL (Hours)",
+            "defaultValue": "24",
+            "toolTip": "Time-to-live in hours. Resources can be automatically cleaned up after this period to control costs.",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9]{1,4}$",
+              "validationMessage": "Must be a number between 1 and 9999"
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "prefix": "[basics('prefix')]",
+      "hubAddressPrefix": "[steps('networkConfig').hubAddressPrefix]",
+      "spoke1AddressPrefix": "[steps('networkConfig').spoke1AddressPrefix]",
+      "spoke2AddressPrefix": "[steps('networkConfig').spoke2AddressPrefix]",
+      "deployFirewall": "[steps('securityOptions').deployFirewall]",
+      "deployVpnGateway": "[steps('securityOptions').deployVpnGateway]",
+      "tags": {
+        "owner": "[steps('tags').owner]",
+        "workload": "[steps('tags').workload]",
+        "environment": "[steps('tags').environment]",
+        "ttlHours": "[steps('tags').ttlHours]"
+      }
+    }
+  }
+}

@@ -1,0 +1,112 @@
+%% Hub-Spoke Network Topology Architecture Diagram
+%% This diagram illustrates the Azure Hub-Spoke network pattern with centralised security and shared services
+
+graph TB
+    subgraph Internet["Internet"]
+        WEB_TRAFFIC["Web Traffic / External Services"]
+    end
+    
+    subgraph OnPremises["On-Premises Network"]
+        DC["Data Center"]
+        USERS["Corporate Users"]
+    end
+    
+    subgraph AzureCloud["Azure Cloud"]
+        
+        subgraph HubVNet["Hub Virtual Network<br/>10.0.0.0/16"]
+            
+            subgraph FirewallSubnet["Azure Firewall Subnet<br/>10.0.0.0/26"]
+                AZFW["Azure Firewall<br/>(Central Inspection Point)<br/>Standard Tier"]
+            end
+            
+            subgraph GatewaySubnet["Gateway Subnet<br/>10.0.0.128/27"]
+                VPNGW["VPN Gateway<br/>(Hybrid Connectivity)<br/>Optional"]
+            end
+            
+            subgraph ManagementSubnet["Management Subnet<br/>10.0.1.0/24"]
+                BASTION["Azure Bastion"]
+                MONITOR["Monitoring Agents"]
+            end
+        end
+        
+        subgraph Spoke1VNet["Spoke 1 Virtual Network<br/>10.1.0.0/16<br/>(Production Workload)"]
+            subgraph Spoke1Subnet["Application Subnet<br/>10.1.0.0/24"]
+                APP1["Web App Tier"]
+                DB1["Database Tier"]
+            end
+            RT1["Route Table:<br/>0.0.0.0/0 → Firewall"]
+            NSG1["Network Security Group:<br/>Allow VNet, Deny All"]
+        end
+        
+        subgraph Spoke2VNet["Spoke 2 Virtual Network<br/>10.2.0.0/16<br/>(Dev/Test Environment)"]
+            subgraph Spoke2Subnet["Application Subnet<br/>10.2.0.0/24"]
+                APP2["Dev Application"]
+                DB2["Test Database"]
+            end
+            RT2["Route Table:<br/>0.0.0.0/0 → Firewall"]
+            NSG2["Network Security Group:<br/>Allow VNet, Deny All"]
+        end
+        
+        subgraph AzureServices["Azure Platform Services"]
+            MONITOR_SVC["Azure Monitor<br/>(Logs & Metrics)"]
+            DIAG["Network Watcher<br/>(Flow Logs & Topology)"]
+        end
+    end
+    
+    %% Internet connectivity
+    WEB_TRAFFIC <-->|Inspected Traffic| AZFW
+    
+    %% Hybrid connectivity
+    VPNGW <-.->|IPsec VPN Tunnel| DC
+    VPNGW <-.->|P2S VPN| USERS
+    
+    %% VNet peering connections (non-transitive)
+    Spoke1VNet -.->|VNet Peering<br/>Non-Transitive| HubVNet
+    HubVNet -.->|VNet Peering<br/>Allow Gateway Transit| Spoke1VNet
+    
+    Spoke2VNet -.->|VNet Peering<br/>Non-Transitive| HubVNet
+    HubVNet -.->|VNet Peering<br/>Allow Gateway Transit| Spoke2VNet
+    
+    %% Traffic flow through firewall
+    Spoke1Subnet -->|All Traffic Routes Via| RT1
+    RT1 -->|Next Hop = Firewall| AZFW
+    
+    Spoke2Subnet -->|All Traffic Routes Via| RT2
+    RT2 -->|Next Hop = Firewall| AZFW
+    
+    %% Inter-spoke communication (forced through hub)
+    AZFW -.->|Allowed Traffic<br/>Logged & Inspected| Spoke1Subnet
+    AZFW -.->|Allowed Traffic<br/>Logged & Inspected| Spoke2Subnet
+    
+    %% Security controls
+    NSG1 -->|Defence-in-Depth| Spoke1Subnet
+    NSG2 -->|Defence-in-Depth| Spoke2Subnet
+    
+    %% Monitoring integration
+    AZFW -->|Diagnostic Logs| MONITOR_SVC
+    NSG1 -->|Flow Logs| MONITOR_SVC
+    NSG2 -->|Flow Logs| MONITOR_SVC
+    HubVNet -->|Topology Data| DIAG
+    Spoke1VNet -->|Topology Data| DIAG
+    Spoke2VNet -->|Topology Data| DIAG
+    
+    %% Management access
+    BASTION -.->|Secure RDP/SSH| Spoke1Subnet
+    BASTION -.->|Secure RDP/SSH| Spoke2Subnet
+    
+    %% Styling
+    classDef hubStyle fill:#e1f5ff,stroke:#0078d4,stroke-width:3px
+    classDef spokeStyle fill:#fff4e1,stroke:#ff8c00,stroke-width:2px
+    classDef firewallStyle fill:#ffcccc,stroke:#d13438,stroke-width:3px
+    classDef gatewayStyle fill:#ccffcc,stroke:#2d7d2d,stroke-width:2px
+    classDef monitoringStyle fill:#f0e6ff,stroke:#7f00ff,stroke-width:2px
+    classDef internetStyle fill:#ffe6e6,stroke:#999,stroke-width:2px
+    classDef onpremStyle fill:#e6f7ff,stroke:#006d91,stroke-width:2px
+    
+    class HubVNet hubStyle
+    class Spoke1VNet,Spoke2VNet spokeStyle
+    class AZFW,FirewallSubnet firewallStyle
+    class VPNGW,GatewaySubnet gatewayStyle
+    class BASTION,MONITOR,ManagementSubnet,MONITOR_SVC,DIAG monitoringStyle
+    class Internet,WEB_TRAFFIC internetStyle
+    class OnPremises,DC,USERS onpremStyle

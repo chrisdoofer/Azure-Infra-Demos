@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "prefix": {
+      "value": "demo"
+    },
+    "functionRuntime": {
+      "value": "node"
+    },
+    "functionRuntimeVersion": {
+      "value": "18"
+    },
+    "cosmosDbConsistency": {
+      "value": "Session"
+    },
+    "apimSku": {
+      "value": "Consumption"
+    },
+    "tags": {
+      "value": {
+        "owner": "pattern-demo",
+        "workload": "serverless-api",
+        "environment": "dev",
+        "ttlHours": "24"
+      }
+    }
+  }
+}

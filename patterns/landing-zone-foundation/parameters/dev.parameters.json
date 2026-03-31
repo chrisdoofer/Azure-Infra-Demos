@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "prefix": {
+      "value": "demo"
+    },
+    "managementGroupPrefix": {
+      "value": "demo"
+    },
+    "rootMgDisplayName": {
+      "value": "Demo Organization"
+    },
+    "location": {
+      "value": "eastus"
+    },
+    "enableDefaultPolicies": {
+      "value": true
+    },
+    "budgetAmount": {
+      "value": 1000
+    },
+    "budgetNotificationEmail": {
+      "value": "admin@example.com"
+    },
+    "tags": {
+      "value": {
+        "owner": "pattern-demo",
+        "workload": "landing-zone-foundation",
+        "environment": "dev",
+        "ttlHours": "24"
+      }
+    }
+  }
+}

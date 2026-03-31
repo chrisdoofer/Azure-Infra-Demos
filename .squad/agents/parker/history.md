@@ -36,3 +36,19 @@
 - **Documentation:** 15-section talk tracks, Mermaid diagrams, patterns.json catalogue, root docs, CONTRIBUTING guide, SECURITY.md
 - **Scaffolding Tools:** Catalogue builder, validation framework, 7 pattern templates with boilerplate Bicep, parameters, README
 - **Ready for Next Phase:** Portal deployment to Static Web Apps, pattern testing, talk track iteration, CI/CD validation
+
+### 2026-03-31: Deploy to Azure Button Hosting Strategy Fixed
+- **Root Cause:** Raw GitHub URLs only work for public repos; private repos return 404 breaking Deploy to Azure buttons
+- **Solution Implemented:** Dual hosting strategy with GitHub Pages as default (works for private repos on Enterprise/Pro/Team)
+- **GitHub Pages Workflow:** Created `.github/workflows/publish-templates.yml` that copies all azuredeploy.json and createUiDefinition.json files to GitHub Pages on push to main/master
+- **Configuration System:** Created `portal/config/site.ts` with siteConfig containing githubOwner, githubRepo, defaultBranch, and templateHosting strategy selection
+- **Dynamic URL Construction:** Updated DeployButton component to build Azure Portal URLs dynamically using siteConfig instead of hardcoded templateUri values
+- **Schema Migration:** Changed Pattern interface from `templateUri: string` to `templatePath: string` (relative path like `patterns/hub-spoke-network/azuredeploy.json`)
+- **Data Updates:** Updated all 8 patterns in portal/data/patterns.json and patterns/catalog/patterns.json to use templatePath instead of templateUri
+- **Documentation Updates:** Updated hub-spoke README explaining both hosting options (GitHub Pages vs raw URLs), setup steps, and template URL format requirements
+- **Root README Updates:** Added "Setup (One-Time)" section explaining how to fork, configure site.ts, enable GitHub Pages, and verify deployment
+- **Portability:** Any fork now automatically gets correct URLs by updating 2 lines in site.ts (githubOwner and templateHosting preference)
+- **Template Base URLs:** GitHub Pages = `https://[owner].github.io/Azure-Infra-Demos`, Raw GitHub = `https://raw.githubusercontent.com/[owner]/Azure-Infra-Demos/[branch]`
+- **Pattern Detail Page:** Updated to pass templatePath (not templateUri) to DeployButton component
+- **All 8 Patterns Migrated:** hub-spoke-network (ready), plus 7 scaffold patterns all using new templatePath schema
+

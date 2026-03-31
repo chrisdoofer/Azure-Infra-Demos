@@ -1,0 +1,43 @@
+graph TB
+    subgraph "Azure Resources"
+        VM[Virtual Machines]
+        APP[App Services]
+        DB[Databases]
+        STG[Storage]
+    end
+    
+    subgraph "Azure Monitor"
+        LA[Log Analytics<br/>Workspace]
+        AI[Application<br/>Insights]
+        AG[Action Group]
+        ALERT[Metric Alerts]
+    end
+    
+    subgraph "Notification Channels"
+        EMAIL[Email]
+        SMS[SMS]
+        WEBHOOK[Webhook]
+    end
+    
+    VM -->|Logs & Metrics| LA
+    APP -->|Logs & Metrics| LA
+    DB -->|Logs & Metrics| LA
+    STG -->|Logs & Metrics| LA
+    
+    APP -->|Telemetry| AI
+    AI -->|Data| LA
+    
+    LA -->|Trigger| ALERT
+    ALERT -->|Notify| AG
+    
+    AG --> EMAIL
+    AG --> SMS
+    AG --> WEBHOOK
+    
+    classDef azureService fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
+    classDef monitor fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
+    classDef notify fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    
+    class VM,APP,DB,STG azureService
+    class LA,AI,AG,ALERT monitor
+    class EMAIL,SMS,WEBHOOK notify

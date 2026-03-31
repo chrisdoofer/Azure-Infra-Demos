@@ -1,0 +1,45 @@
+graph TB
+    subgraph "Subscription"
+        subgraph "Governance Layer"
+            POL[Azure Policy<br/>Assignments]
+            RBAC[RBAC Roles<br/>& Assignments]
+            BUDGET[Cost Management<br/>& Budgets]
+        end
+        
+        subgraph "Foundation Resource Groups"
+            RG_MGMT[rg-management<br/>Log Analytics]
+            RG_CONN[rg-connectivity<br/>Hub Network]
+            RG_SEC[rg-security<br/>Security Center]
+        end
+    end
+    
+    subgraph "Management Group Hierarchy"
+        ROOT[Root MG]
+        PLATFORM[Platform MG]
+        LZ[Landing Zones MG]
+        SANDBOX[Sandbox MG]
+        
+        ROOT --> PLATFORM
+        ROOT --> LZ
+        ROOT --> SANDBOX
+    end
+    
+    POL -.->|Enforce| RG_MGMT
+    POL -.->|Enforce| RG_CONN
+    POL -.->|Enforce| RG_SEC
+    
+    RBAC -.->|Control Access| RG_MGMT
+    RBAC -.->|Control Access| RG_CONN
+    RBAC -.->|Control Access| RG_SEC
+    
+    BUDGET -.->|Monitor| RG_MGMT
+    BUDGET -.->|Monitor| RG_CONN
+    BUDGET -.->|Monitor| RG_SEC
+    
+    classDef governance fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    classDef rg fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
+    classDef mg fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
+    
+    class POL,RBAC,BUDGET governance
+    class RG_MGMT,RG_CONN,RG_SEC rg
+    class ROOT,PLATFORM,LZ,SANDBOX mg

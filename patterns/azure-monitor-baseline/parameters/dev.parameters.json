@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "prefix": {
+      "value": "demo"
+    },
+    "retentionDays": {
+      "value": 30
+    },
+    "alertEmail": {
+      "value": "alerts@example.com"
+    },
+    "dailyQuotaGb": {
+      "value": 1
+    },
+    "tags": {
+      "value": {
+        "owner": "pattern-demo",
+        "workload": "azure-monitor-baseline",
+        "environment": "dev",
+        "ttlHours": "24"
+      }
+    }
+  }
+}

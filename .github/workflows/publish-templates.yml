@@ -1,0 +1,78 @@
+name: Publish ARM Templates to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'patterns/**/azuredeploy.json'
+      - 'patterns/**/createUiDefinition.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Prepare publish directory
+        run: |
+          mkdir -p _publish/patterns
+          
+          # Copy all azuredeploy.json and createUiDefinition.json files to publish directory
+          # Maintain the patterns/{slug}/ structure
+          for pattern_dir in patterns/*/; do
+            if [ -d "$pattern_dir" ]; then
+              slug=$(basename "$pattern_dir")
+              
+              # Skip _template and catalog directories
+              if [ "$slug" = "_template" ] || [ "$slug" = "catalog" ]; then
+                continue
+              fi
+              
+              echo "Processing pattern: $slug"
+              mkdir -p "_publish/patterns/$slug"
+              
+              # Copy ARM template if exists
+              if [ -f "${pattern_dir}azuredeploy.json" ]; then
+                cp "${pattern_dir}azuredeploy.json" "_publish/patterns/$slug/azuredeploy.json"
+                echo "  ✓ Copied azuredeploy.json"
+              fi
+              
+              # Copy Portal UI definition if exists
+              if [ -f "${pattern_dir}createUiDefinition.json" ]; then
+                cp "${pattern_dir}createUiDefinition.json" "_publish/patterns/$slug/createUiDefinition.json"
+                echo "  ✓ Copied createUiDefinition.json"
+              fi
+            fi
+          done
+          
+          echo "Publish directory contents:"
+          find _publish -type f
+      
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '_publish'
+      
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

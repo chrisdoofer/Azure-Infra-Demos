@@ -1,0 +1,46 @@
+graph TB
+    subgraph "Azure Virtual Network"
+        subgraph "App Gateway Subnet"
+            AGW[Application<br/>Gateway + WAF]
+        end
+        
+        subgraph "AKS Subnet"
+            AKS[AKS Cluster<br/>System Pool]
+            POD1[Pod: Service A]
+            POD2[Pod: Service B]
+            POD3[Pod: Service C]
+        end
+    end
+    
+    subgraph "Supporting Services"
+        ACR[Container<br/>Registry]
+        KV[Key Vault<br/>CSI Driver]
+        MON[Container<br/>Insights]
+    end
+    
+    User[External Client] -->|HTTPS| AGW
+    AGW -->|Route| AKS
+    AKS --> POD1
+    AKS --> POD2
+    AKS --> POD3
+    
+    POD1 -.->|Pull Images| ACR
+    POD2 -.->|Pull Images| ACR
+    POD3 -.->|Pull Images| ACR
+    
+    POD1 -.->|Get Secrets| KV
+    POD2 -.->|Get Secrets| KV
+    
+    AKS -.->|Metrics & Logs| MON
+    
+    classDef gateway fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    classDef aks fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
+    classDef pods fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
+    classDef support fill:#00BCF2,stroke:#000,stroke-width:2px,color:#000
+    classDef user fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
+    
+    class AGW gateway
+    class AKS aks
+    class POD1,POD2,POD3 pods
+    class ACR,KV,MON support
+    class User user

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "prefix": {
+      "value": "demo"
+    },
+    "nodeCount": {
+      "value": 3
+    },
+    "vmSize": {
+      "value": "Standard_D2s_v3"
+    },
+    "kubernetesVersion": {
+      "value": "1.28.3"
+    },
+    "enableAzurePolicy": {
+      "value": true
+    },
+    "tags": {
+      "value": {
+        "owner": "pattern-demo",
+        "workload": "microservices-aks",
+        "environment": "dev",
+        "ttlHours": "24"
+      }
+    }
+  }
+}

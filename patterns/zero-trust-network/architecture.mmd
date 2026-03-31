@@ -1,0 +1,56 @@
+graph TB
+    Internet[Internet] -->|HTTPS| AGW
+    
+    subgraph "Security Perimeter"
+        AGW[Application Gateway<br/>+ WAF v2]
+        FW[Azure Firewall<br/>Optional]
+    end
+    
+    subgraph "Virtual Network - Zero Trust Segmentation"
+        subgraph "App Gateway Subnet"
+            AGW
+        end
+        
+        subgraph "Firewall Subnet"
+            FW
+        end
+        
+        subgraph "Application Subnet + NSG"
+            APP[Application VMs]
+        end
+        
+        subgraph "Private Endpoint Subnet + NSG"
+            PE1[Private Endpoint<br/>Storage]
+            PE2[Private Endpoint<br/>Key Vault]
+            PE3[Private Endpoint<br/>SQL DB]
+        end
+    end
+    
+    subgraph "PaaS Services - No Public Access"
+        STORAGE[Blob Storage]
+        KV[Key Vault]
+        SQL[SQL Database]
+    end
+    
+    AGW -->|Filtered| APP
+    APP -->|Egress Filter| FW
+    FW -->|Controlled| Internet
+    
+    APP -.->|Private Link| PE1
+    APP -.->|Private Link| PE2
+    APP -.->|Private Link| PE3
+    
+    PE1 -.-> STORAGE
+    PE2 -.-> KV
+    PE3 -.-> SQL
+    
+    classDef security fill:#E81123,stroke:#000,stroke-width:3px,color:#fff
+    classDef network fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
+    classDef app fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
+    classDef paas fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    classDef external fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
+    
+    class AGW,FW security
+    class APP,PE1,PE2,PE3 network
+    class STORAGE,KV,SQL paas
+    class Internet external
