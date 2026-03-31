@@ -49,11 +49,11 @@ export default function FilterBar({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
+        <h3 className="text-[14px] font-semibold text-neutral-text-primary">Filters</h3>
         {activeFilterCount > 0 && (
           <button
             onClick={onClearAll}
-            className="text-sm text-azure-600 hover:text-azure-700 font-medium"
+            className="text-[14px] text-azure hover:text-azure-hover font-normal"
           >
             Clear all ({activeFilterCount})
           </button>
@@ -61,7 +61,7 @@ export default function FilterBar({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-[14px] font-normal text-neutral-text-primary mb-2">
           Category
         </label>
         <div className="flex flex-wrap gap-2">
@@ -69,10 +69,10 @@ export default function FilterBar({
             <button
               key={category}
               onClick={() => toggleCategory(category)}
-              className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+              className={`px-3 py-1.5 text-[12px] rounded-full transition-colors ${
                 selectedCategories.includes(category)
-                  ? 'bg-azure-500 text-white border-azure-500'
-                  : 'bg-white text-gray-700 border-gray-300 hover:border-azure-500'
+                  ? 'bg-azure-light text-azure'
+                  : 'bg-neutral-subtle text-neutral-text-primary hover:bg-neutral-divider'
               }`}
             >
               {getCategoryLabel(category)}
@@ -82,7 +82,7 @@ export default function FilterBar({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-[14px] font-normal text-neutral-text-primary mb-2">
           Cost Band
         </label>
         <div className="flex flex-wrap gap-2">
@@ -90,10 +90,10 @@ export default function FilterBar({
             <button
               key={costBand}
               onClick={() => toggleCostBand(costBand)}
-              className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+              className={`px-3 py-1.5 text-[12px] rounded-full transition-colors ${
                 selectedCostBands.includes(costBand)
-                  ? 'bg-azure-500 text-white border-azure-500'
-                  : 'bg-white text-gray-700 border-gray-300 hover:border-azure-500'
+                  ? 'bg-azure-light text-azure'
+                  : 'bg-neutral-subtle text-neutral-text-primary hover:bg-neutral-divider'
               }`}
             >
               {costBand}
@@ -103,7 +103,7 @@ export default function FilterBar({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-[14px] font-normal text-neutral-text-primary mb-2">
           Complexity: {complexityRange[0]} - {complexityRange[1]}
         </label>
         <div className="flex items-center gap-4">
@@ -124,7 +124,7 @@ export default function FilterBar({
             className="flex-1"
           />
         </div>
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
+        <div className="flex justify-between text-[12px] text-neutral-text-disabled mt-1">
           <span>Beginner</span>
           <span>Expert</span>
         </div>

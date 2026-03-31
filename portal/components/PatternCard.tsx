@@ -14,19 +14,19 @@ export default function PatternCard({ pattern }: PatternCardProps) {
 
   return (
     <Link href={`/patterns/${pattern.slug}/`} className="block h-full">
-      <div className="h-full bg-white border border-gray-200 rounded-lg p-6 card-hover">
+      <div className="h-full bg-neutral-white border border-neutral-border-default rounded-md p-6 card-hover shadow-card">
         <div className="flex items-start justify-between mb-3">
-          <span className={`px-3 py-1 text-xs font-medium rounded-full ${getCategoryColor(pattern.category)}`}>
+          <span className={`px-3 py-1 text-[12px] leading-[16px] font-normal rounded-full ${getCategoryColor(pattern.category)}`}>
             {getCategoryLabel(pattern.category)}
           </span>
           <CostBadge costBand={pattern.estimatedCostBand} />
         </div>
 
-        <h3 className="text-xl font-semibold text-gray-900 mb-2 line-clamp-2">
+        <h3 className="text-[16px] leading-[22px] font-semibold text-neutral-text-primary mb-2 line-clamp-2">
           {pattern.title}
         </h3>
 
-        <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+        <p className="text-[14px] leading-[20px] text-neutral-text-secondary mb-4 line-clamp-2">
           {pattern.summary}
         </p>
 
@@ -34,23 +34,23 @@ export default function PatternCard({ pattern }: PatternCardProps) {
           {displayServices.map((service) => (
             <span
               key={service}
-              className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded"
+              className="px-2 py-1 text-[12px] bg-neutral-subtle text-neutral-text-primary rounded"
             >
               {service}
             </span>
           ))}
           {remainingCount > 0 && (
-            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+            <span className="px-2 py-1 text-[12px] bg-neutral-subtle text-neutral-text-primary rounded">
               +{remainingCount} more
             </span>
           )}
         </div>
 
-        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+        <div className="flex items-center justify-between pt-4 border-t border-neutral-divider">
           <ComplexityIndicator complexity={pattern.complexity} />
-          <div className="flex items-center gap-1 text-sm text-gray-600">
+          <div className="flex items-center gap-1 text-[14px] text-neutral-text-secondary">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span>{pattern.typicalDeployTimeMinutes} min</span>
           </div>
@@ -58,10 +58,10 @@ export default function PatternCard({ pattern }: PatternCardProps) {
 
         {pattern.deploymentModesSupported.length > 0 && (
           <div className="mt-3 flex items-center gap-1">
-            <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-4 h-4 text-semantic-success" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
-            <span className="text-xs text-green-600 font-medium">Ready to deploy</span>
+            <span className="text-[12px] text-semantic-success font-normal">Ready to deploy</span>
           </div>
         )}
       </div>

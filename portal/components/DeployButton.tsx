@@ -11,12 +11,11 @@ export default function DeployButton({
   patternName,
   variant = 'primary' 
 }: DeployButtonProps) {
-  const baseClasses = "inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2";
+  const baseClasses = "inline-flex items-center gap-2 px-6 py-2 rounded font-normal transition-colors focus:outline-none focus:ring-2 focus:ring-azure focus:ring-offset-1 text-[14px] h-8";
   const variantClasses = variant === 'primary'
-    ? "bg-azure-500 text-white hover:bg-azure-600 focus:ring-azure-500"
-    : "bg-white text-azure-600 border-2 border-azure-500 hover:bg-azure-50 focus:ring-azure-500";
+    ? "bg-azure text-white hover:bg-azure-hover"
+    : "bg-neutral-white text-azure border border-neutral-border-strong hover:bg-neutral-subtle";
 
-  // Construct full template URL from config
   const templateUrl = `${siteConfig.templateBaseUrl}/${templatePath}`;
   const encodedUrl = encodeURIComponent(templateUrl);
   const deployUrl = `https://portal.azure.com/#create/Microsoft.Template/uri/${encodedUrl}`;
@@ -34,7 +33,7 @@ export default function DeployButton({
       </svg>
       <span>Deploy to Azure</span>
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
       </svg>
     </a>
   );

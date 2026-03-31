@@ -14,14 +14,14 @@ export default function ComplexityIndicator({ complexity, showLabel = false }: C
             key={level}
             className={`w-2 h-2 rounded-full ${
               level <= complexity 
-                ? 'bg-azure-500' 
-                : 'bg-gray-300'
+                ? 'bg-azure' 
+                : 'bg-neutral-border-default'
             }`}
           />
         ))}
       </div>
       {showLabel && (
-        <span className="text-sm text-gray-600">
+        <span className="text-[14px] text-neutral-text-secondary">
           {getComplexityLabel(complexity)}
         </span>
       )}

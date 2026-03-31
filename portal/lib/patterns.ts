@@ -91,14 +91,14 @@ export function getCategoryLabel(category: PatternCategory): string {
 
 export function getCategoryColor(category: PatternCategory): string {
   const colors: Record<PatternCategory, string> = {
-    'networking': 'bg-blue-100 text-blue-800',
-    'compute': 'bg-green-100 text-green-800',
-    'data': 'bg-purple-100 text-purple-800',
-    'security': 'bg-red-100 text-red-800',
-    'monitoring': 'bg-yellow-100 text-yellow-800',
-    'governance': 'bg-gray-100 text-gray-800',
-    'ai-ml': 'bg-pink-100 text-pink-800',
-    'web': 'bg-indigo-100 text-indigo-800',
+    'networking': 'bg-[#DEECF9] text-[#0078D4]',
+    'compute': 'bg-[#D1F0E8] text-[#008272]',
+    'data': 'bg-[#EFE7F5] text-[#8764B8]',
+    'security': 'bg-[#FFEAE5] text-[#D83B01]',
+    'monitoring': 'bg-[#CDEFEF] text-[#00B7C3]',
+    'governance': 'bg-[#E5F0D3] text-[#498205]',
+    'ai-ml': 'bg-[#F5E7F7] text-[#881798]',
+    'web': 'bg-[#DEECF9] text-[#0078D4]',
   };
   return colors[category];
 }

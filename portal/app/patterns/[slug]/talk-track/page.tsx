@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { loadPatterns, getPatternBySlug } from '@/lib/patterns';
@@ -17,7 +19,15 @@ export default function TalkTrackPage({ params }: { params: { slug: string } }) 
     notFound();
   }
 
-  const talkTrackContent = "";
+  // Load talk track markdown content at build time
+  let talkTrackContent = '';
+  try {
+    const talkTrackPath = path.join(process.cwd(), '..', 'patterns', params.slug, 'talk-track.md');
+    talkTrackContent = fs.readFileSync(talkTrackPath, 'utf-8');
+  } catch {
+    // Talk track file may not exist for scaffold patterns
+    talkTrackContent = '';
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
