@@ -1,5 +1,5 @@
 // Microservices on Azure Kubernetes Service
-// AKS cluster with Container Registry, Key Vault, and Application Gateway
+// Complete production-ready AKS cluster with Container Registry, Key Vault, monitoring, and networking
 
 @description('Azure region for deployment')
 param location string = resourceGroup().location
@@ -12,20 +12,21 @@ param tags object = {
   owner: 'pattern-demo'
   workload: 'microservices-aks'
   environment: 'demo'
-  ttlHours: '24'
+  ttlHours: '48'
 }
 
-@description('AKS node count')
-param nodeCount int = 3
-
-@description('AKS VM size')
-param vmSize string = 'Standard_D2s_v3'
-
 @description('Kubernetes version')
-param kubernetesVersion string = '1.28.3'
+param kubernetesVersion string = '1.29'
 
-@description('Enable Azure Policy for AKS')
-param enableAzurePolicy bool = true
+@description('Number of nodes in the system node pool')
+param nodeCount int = 2
+
+@description('VM size for AKS nodes')
+param vmSize string = 'Standard_B2s'
+
+@description('Azure Container Registry SKU')
+@allowed(['Basic', 'Standard', 'Premium'])
+param acrSku string = 'Basic'
 
 @description('Deployment timestamp')
 param deploymentTime string = utcNow('u')
@@ -44,16 +45,15 @@ var aksName = 'aks-${resourceSuffix}'
 var acrName = 'acr${replace(resourceSuffix, '-', '')}'
 var keyVaultName = 'kv-${take(replace(resourceSuffix, '-', ''), 24)}'
 var logAnalyticsName = 'log-${resourceSuffix}'
+var appInsightsName = 'appi-${resourceSuffix}'
 var vnetName = 'vnet-${resourceSuffix}'
-var appGwName = 'agw-${resourceSuffix}'
-var appGwPublicIpName = 'pip-${resourceSuffix}'
 
 var vnetAddressPrefix = '10.1.0.0/16'
 var aksSubnetPrefix = '10.1.0.0/20'
-var appGwSubnetPrefix = '10.1.16.0/24'
+var servicesSubnetPrefix = '10.1.16.0/24'
 
 // ============================================================================
-// LOG ANALYTICS
+// LOG ANALYTICS & APPLICATION INSIGHTS
 // ============================================================================
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
@@ -65,6 +65,23 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
       name: 'PerGB2018'
     }
     retentionInDays: 30
+    features: {
+      enableLogAccessUsingOnlyResourcePermissions: true
+    }
+  }
+}
+
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  tags: commonTags
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalytics.id
+    IngestionMode: 'LogAnalytics'
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
   }
 }
 
@@ -87,27 +104,19 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2023-05-01' = {
         name: 'AksSubnet'
         properties: {
           addressPrefix: aksSubnetPrefix
+          privateEndpointNetworkPolicies: 'Disabled'
+          privateLinkServiceNetworkPolicies: 'Enabled'
         }
       }
       {
-        name: 'AppGwSubnet'
+        name: 'ServicesSubnet'
         properties: {
-          addressPrefix: appGwSubnetPrefix
+          addressPrefix: servicesSubnetPrefix
+          privateEndpointNetworkPolicies: 'Disabled'
+          privateLinkServiceNetworkPolicies: 'Enabled'
         }
       }
     ]
-  }
-}
-
-resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
-  name: appGwPublicIpName
-  location: location
-  tags: commonTags
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    publicIPAllocationMethod: 'Static'
   }
 }
 
@@ -120,11 +129,13 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
   location: location
   tags: commonTags
   sku: {
-    name: 'Standard'
+    name: acrSku
   }
   properties: {
     adminUserEnabled: false
     publicNetworkAccess: 'Enabled'
+    networkRuleBypassOptions: 'AzureServices'
+    zoneRedundancy: acrSku == 'Premium' ? 'Enabled' : 'Disabled'
   }
 }
 
@@ -146,7 +157,13 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enabledForDeployment: false
     enabledForTemplateDeployment: true
     enableSoftDelete: true
-    softDeleteRetentionInDays: 7
+    softDeleteRetentionInDays: 90
+    enablePurgeProtection: true
+    publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Allow'
+      bypass: 'AzureServices'
+    }
   }
 }
 
@@ -154,7 +171,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
 // AKS CLUSTER
 // ============================================================================
 
-resource aksCluster 'Microsoft.ContainerService/managedClusters@2023-10-01' = {
+resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-01-01' = {
   name: aksName
   location: location
   tags: commonTags
@@ -165,9 +182,22 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2023-10-01' = {
     kubernetesVersion: kubernetesVersion
     dnsPrefix: '${aksName}-dns'
     enableRBAC: true
+    aadProfile: {
+      managed: true
+      enableAzureRBAC: true
+    }
+    oidcIssuerProfile: {
+      enabled: true
+    }
+    securityProfile: {
+      workloadIdentity: {
+        enabled: true
+      }
+    }
     networkProfile: {
       networkPlugin: 'azure'
       networkPolicy: 'azure'
+      loadBalancerSku: 'standard'
       serviceCidr: '10.2.0.0/16'
       dnsServiceIP: '10.2.0.10'
     }
@@ -179,31 +209,45 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2023-10-01' = {
         osType: 'Linux'
         mode: 'System'
         vnetSubnetID: virtualNetwork.properties.subnets[0].id
-        enableAutoScaling: true
-        minCount: 1
-        maxCount: 5
+        enableAutoScaling: false
+        type: 'VirtualMachineScaleSets'
+        maxPods: 30
+        availabilityZones: []
       }
     ]
     addonProfiles: {
-      azurepolicy: {
-        enabled: enableAzurePolicy
-      }
       omsagent: {
         enabled: true
         config: {
           logAnalyticsWorkspaceResourceID: logAnalytics.id
+          useAADAuth: 'true'
         }
       }
       azureKeyvaultSecretsProvider: {
         enabled: true
+        config: {
+          enableSecretRotation: 'true'
+          rotationPollInterval: '2m'
+        }
       }
+    }
+    apiServerAccessProfile: {
+      enablePrivateCluster: false
+    }
+    autoScalerProfile: {
+      'scale-down-delay-after-add': '10m'
+      'scale-down-unneeded-time': '10m'
     }
   }
 }
 
-// Grant AKS access to ACR
+// ============================================================================
+// RBAC ROLE ASSIGNMENTS
+// ============================================================================
+
+// Grant AKS kubelet identity AcrPull role on Container Registry
 resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(resourceGroup().id, aksCluster.id, 'AcrPull')
+  name: guid(containerRegistry.id, aksCluster.id, 'AcrPull')
   scope: containerRegistry
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
@@ -212,19 +256,20 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
   }
 }
 
-// ============================================================================
-// APPLICATION GATEWAY (placeholder - requires additional config)
-// ============================================================================
-
-// Note: Full Application Gateway configuration requires additional parameters
-// This is a minimal placeholder for the pattern scaffold
+// Grant AKS managed identity Key Vault Secrets User role on Key Vault
+resource kvSecretsUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, aksCluster.id, 'KeyVaultSecretsUser')
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+    principalId: aksCluster.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
 
 // ============================================================================
 // OUTPUTS
 // ============================================================================
-
-@description('Resource group name')
-output resourceGroupName string = resourceGroup().name
 
 @description('AKS cluster name')
 output aksClusterName string = aksCluster.name
@@ -232,14 +277,26 @@ output aksClusterName string = aksCluster.name
 @description('AKS cluster FQDN')
 output aksClusterFqdn string = aksCluster.properties.fqdn
 
-@description('Container Registry name')
-output containerRegistryName string = containerRegistry.name
-
 @description('Container Registry login server')
-output containerRegistryLoginServer string = containerRegistry.properties.loginServer
+output acrLoginServer string = containerRegistry.properties.loginServer
 
-@description('Key Vault name')
-output keyVaultName string = keyVault.name
+@description('Key Vault URI')
+output keyVaultUri string = keyVault.properties.vaultUri
+
+@description('Log Analytics workspace ID')
+output workspaceId string = logAnalytics.id
+
+@description('Application Insights instrumentation key')
+output appInsightsInstrumentationKey string = appInsights.properties.InstrumentationKey
+
+@description('Application Insights connection string')
+output appInsightsConnectionString string = appInsights.properties.ConnectionString
+
+@description('Virtual Network ID')
+output vnetId string = virtualNetwork.id
+
+@description('AKS subnet ID')
+output aksSubnetId string = virtualNetwork.properties.subnets[0].id
 
 @description('Get AKS credentials command')
 output getCredentialsCommand string = 'az aks get-credentials --resource-group ${resourceGroup().name} --name ${aksCluster.name}'
@@ -265,6 +322,16 @@ output deployedResources array = [
     type: 'Microsoft.Network/virtualNetworks'
     name: virtualNetwork.name
     id: virtualNetwork.id
+  }
+  {
+    type: 'Microsoft.OperationalInsights/workspaces'
+    name: logAnalytics.name
+    id: logAnalytics.id
+  }
+  {
+    type: 'Microsoft.Insights/components'
+    name: appInsights.name
+    id: appInsights.id
   }
 ]
 

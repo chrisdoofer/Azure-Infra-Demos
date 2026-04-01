@@ -9,23 +9,23 @@
       "value": "demo"
     },
     "nodeCount": {
-      "value": 3
+      "value": 2
     },
     "vmSize": {
-      "value": "Standard_D2s_v3"
+      "value": "Standard_B2s"
     },
     "kubernetesVersion": {
-      "value": "1.28.3"
+      "value": "1.29"
     },
-    "enableAzurePolicy": {
-      "value": true
+    "acrSku": {
+      "value": "Basic"
     },
     "tags": {
       "value": {
         "owner": "pattern-demo",
         "workload": "microservices-aks",
         "environment": "dev",
-        "ttlHours": "24"
+        "ttlHours": "48"
       }
     }
   }

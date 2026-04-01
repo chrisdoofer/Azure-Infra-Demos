@@ -102,17 +102,17 @@
     "estimatedCostBand": "high",
     "complexity": 4,
     "typicalDeployTimeMinutes": 25,
-    "deploymentModesSupported": [],
+    "deploymentModesSupported": ["portal", "actions"],
     "templatePath": "patterns/microservices-aks/azuredeploy.json",
     "actionsWorkflowInputsExample": {
-      "resourceGroupName": "rg-aks-prod",
-      "location": "northeurope",
-      "clusterName": "aks-prod",
-      "nodeCount": "3",
-      "vmSize": "Standard_D4s_v3",
-      "enableAutoScaling": "true"
+      "resourceGroupName": "rg-aks-demo",
+      "location": "australiaeast",
+      "prefix": "demo",
+      "kubernetesVersion": "1.29",
+      "nodeCount": "2",
+      "vmSize": "Standard_B2s"
     },
-    "lastReviewedDate": "2024-03-05"
+    "lastReviewedDate": "2026-04-01"
   },
   {
     "id": "pat-006",
@@ -171,15 +171,14 @@
     "estimatedCostBand": "medium",
     "complexity": 4,
     "typicalDeployTimeMinutes": 15,
-    "deploymentModesSupported": [],
+    "deploymentModesSupported": ["portal", "actions"],
     "templatePath": "patterns/zero-trust-network/azuredeploy.json",
     "actionsWorkflowInputsExample": {
       "resourceGroupName": "rg-zerotrust",
-      "location": "westus",
-      "wafMode": "Prevention",
-      "enableFirewall": "true",
-      "enablePrivateLink": "true"
+      "location": "australiaeast",
+      "prefix": "zt",
+      "enableWafPrevention": "true"
     },
-    "lastReviewedDate": "2024-03-14"
+    "lastReviewedDate": "2026-04-01"
   }
 ]

@@ -1,48 +1,38 @@
 graph TB
-    Internet[Internet] -->|HTTPS| AGW
+    Internet[Internet] -->|HTTPS/HTTP| AppGwPIP
     
-    subgraph "Security Perimeter"
-        AGW[Application Gateway<br/>+ WAF v2]
-        FW[Azure Firewall<br/>Optional]
-    end
-    
-    subgraph "Virtual Network - Zero Trust Segmentation"
-        subgraph "App Gateway Subnet"
-            AGW
+    subgraph "Zero Trust Network - 10.0.0.0/16"
+        subgraph "AppGatewaySubnet - 10.0.1.0/24"
+            AppGwPIP[Public IP<br/>Standard SKU]
+            AGW[Application Gateway<br/>WAF_v2 Tier<br/>OWASP 3.2 Prevention]
         end
         
-        subgraph "Firewall Subnet"
-            FW
+        subgraph "AzureFirewallSubnet - 10.0.2.0/24"
+            FWPIP[Firewall Public IP]
+            FW[Azure Firewall<br/>Standard Tier<br/>Network + App Rules]
         end
         
-        subgraph "Application Subnet + NSG"
-            APP[Application VMs]
+        subgraph "AppIntegrationSubnet - 10.0.3.0/24 + NSG + Route Table"
+            WEBAPP[Web App<br/>B1 Linux, Node.js 20<br/>VNet Integration]
         end
         
-        subgraph "Private Endpoint Subnet + NSG"
-            PE1[Private Endpoint<br/>Storage]
-            PE2[Private Endpoint<br/>Key Vault]
-            PE3[Private Endpoint<br/>SQL DB]
+        subgraph "PrivateEndpointSubnet - 10.0.4.0/24 + NSG"
+            PE[Private Endpoint<br/>Web App Connection]
         end
     end
     
-    subgraph "PaaS Services - No Public Access"
-        STORAGE[Blob Storage]
-        KV[Key Vault]
-        SQL[SQL Database]
+    subgraph "PaaS Services"
+        ASP[App Service Plan<br/>B1 Basic Linux]
+        PDNS[Private DNS Zone<br/>privatelink.azurewebsites.net]
     end
     
-    AGW -->|Filtered| APP
-    APP -->|Egress Filter| FW
-    FW -->|Controlled| Internet
-    
-    APP -.->|Private Link| PE1
-    APP -.->|Private Link| PE2
-    APP -.->|Private Link| PE3
-    
-    PE1 -.-> STORAGE
-    PE2 -.-> KV
-    PE3 -.-> SQL
+    AppGwPIP --> AGW
+    AGW -->|Backend Pool| WEBAPP
+    WEBAPP -->|Private Link| PE
+    WEBAPP -->|Hosted On| ASP
+    PE -.->|DNS Resolution| PDNS
+    WEBAPP -->|All Traffic| FW
+    FW -->|Filtered Egress| Internet
     
     classDef security fill:#E81123,stroke:#000,stroke-width:3px,color:#fff
     classDef network fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
@@ -51,6 +41,6 @@ graph TB
     classDef external fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
     
     class AGW,FW security
-    class APP,PE1,PE2,PE3 network
-    class STORAGE,KV,SQL paas
+    class WEBAPP,PE,AppGwPIP,FWPIP network
+    class ASP,PDNS paas
     class Internet external

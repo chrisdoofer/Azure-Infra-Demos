@@ -24,14 +24,14 @@ param appGwSubnetPrefix string = '10.0.1.0/24'
 @description('Firewall subnet prefix')
 param firewallSubnetPrefix string = '10.0.2.0/24'
 
+@description('Application subnet prefix (with VNet integration delegation)')
+param appSubnetPrefix string = '10.0.3.0/24'
+
 @description('Private Endpoint subnet prefix')
-param privateEndpointSubnetPrefix string = '10.0.3.0/24'
+param privateEndpointSubnetPrefix string = '10.0.4.0/24'
 
-@description('Application subnet prefix')
-param applicationSubnetPrefix string = '10.0.4.0/24'
-
-@description('Deploy Azure Firewall')
-param deployFirewall bool = false
+@description('Enable WAF in Prevention mode (vs Detection)')
+param enableWafPrevention bool = true
 
 @description('Deployment timestamp')
 param deploymentTime string = utcNow('u')
@@ -49,12 +49,18 @@ var commonTags = union(tags, {
 var vnetName = 'vnet-${resourceSuffix}'
 var nsgAppGwName = 'nsg-appgw-${resourceSuffix}'
 var nsgAppName = 'nsg-app-${resourceSuffix}'
+var nsgPeSubnetName = 'nsg-pe-${resourceSuffix}'
 var appGwName = 'agw-${resourceSuffix}'
 var appGwPublicIpName = 'pip-agw-${resourceSuffix}'
 var firewallName = 'fw-${resourceSuffix}'
 var firewallPublicIpName = 'pip-fw-${resourceSuffix}'
 var wafPolicyName = 'waf-${resourceSuffix}'
 var logAnalyticsName = 'log-${resourceSuffix}'
+var routeTableName = 'rt-app-${resourceSuffix}'
+var appServicePlanName = 'asp-${resourceSuffix}'
+var webAppName = 'app-${uniqueString(resourceGroup().id)}'
+var privateEndpointName = 'pe-webapp-${resourceSuffix}'
+var privateDnsZoneName = 'privatelink.azurewebsites.net'
 
 // ============================================================================
 // LOG ANALYTICS
@@ -132,6 +138,19 @@ resource nsgApp 'Microsoft.Network/networkSecurityGroups@2023-05-01' = {
   properties: {
     securityRules: [
       {
+        name: 'AllowVNetInbound'
+        properties: {
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 100
+          direction: 'Inbound'
+        }
+      }
+      {
         name: 'DenyAllInbound'
         properties: {
           protocol: '*'
@@ -140,11 +159,60 @@ resource nsgApp 'Microsoft.Network/networkSecurityGroups@2023-05-01' = {
           sourceAddressPrefix: '*'
           destinationAddressPrefix: '*'
           access: 'Deny'
-          priority: 1000
+          priority: 4096
           direction: 'Inbound'
         }
       }
     ]
+  }
+}
+
+resource nsgPeSubnet 'Microsoft.Network/networkSecurityGroups@2023-05-01' = {
+  name: nsgPeSubnetName
+  location: location
+  tags: commonTags
+  properties: {
+    securityRules: [
+      {
+        name: 'AllowVNetInbound'
+        properties: {
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 100
+          direction: 'Inbound'
+        }
+      }
+      {
+        name: 'DenyAllInbound'
+        properties: {
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+          access: 'Deny'
+          priority: 4096
+          direction: 'Inbound'
+        }
+      }
+    ]
+  }
+}
+
+// ============================================================================
+// ROUTE TABLE
+// ============================================================================
+
+resource routeTable 'Microsoft.Network/routeTables@2023-05-01' = {
+  name: routeTableName
+  location: location
+  tags: commonTags
+  properties: {
+    routes: []
   }
 }
 
@@ -179,19 +247,33 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2023-05-01' = {
         }
       }
       {
-        name: 'PrivateEndpointSubnet'
+        name: 'AppIntegrationSubnet'
         properties: {
-          addressPrefix: privateEndpointSubnetPrefix
-          privateEndpointNetworkPolicies: 'Disabled'
-        }
-      }
-      {
-        name: 'ApplicationSubnet'
-        properties: {
-          addressPrefix: applicationSubnetPrefix
+          addressPrefix: appSubnetPrefix
           networkSecurityGroup: {
             id: nsgApp.id
           }
+          routeTable: {
+            id: routeTable.id
+          }
+          delegations: [
+            {
+              name: 'delegation'
+              properties: {
+                serviceName: 'Microsoft.Web/serverFarms'
+              }
+            }
+          ]
+        }
+      }
+      {
+        name: 'PrivateEndpointSubnet'
+        properties: {
+          addressPrefix: privateEndpointSubnetPrefix
+          networkSecurityGroup: {
+            id: nsgPeSubnet.id
+          }
+          privateEndpointNetworkPolicies: 'Disabled'
         }
       }
     ]
@@ -211,7 +293,7 @@ resource wafPolicy 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPo
       requestBodyCheck: true
       maxRequestBodySizeInKb: 128
       fileUploadLimitInMb: 100
-      mode: 'Prevention'
+      mode: enableWafPrevention ? 'Prevention' : 'Detection'
       state: 'Enabled'
     }
     managedRules: {
@@ -238,6 +320,9 @@ resource appGwPublicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
   }
   properties: {
     publicIPAllocationMethod: 'Static'
+    dnsSettings: {
+      domainNameLabel: toLower('agw-${uniqueString(resourceGroup().id)}')
+    }
   }
 }
 
@@ -256,7 +341,7 @@ resource applicationGateway 'Microsoft.Network/applicationGateways@2023-05-01' =
         name: 'appGwIpConfig'
         properties: {
           subnet: {
-            id: virtualNetwork.properties.subnets[0].id
+            id: '${virtualNetwork.id}/subnets/AppGatewaySubnet'
           }
         }
       }
@@ -273,15 +358,15 @@ resource applicationGateway 'Microsoft.Network/applicationGateways@2023-05-01' =
     ]
     frontendPorts: [
       {
-        name: 'port443'
-        properties: {
-          port: 443
-        }
-      }
-      {
         name: 'port80'
         properties: {
           port: 80
+        }
+      }
+      {
+        name: 'port443'
+        properties: {
+          port: 443
         }
       }
     ]
@@ -289,7 +374,11 @@ resource applicationGateway 'Microsoft.Network/applicationGateways@2023-05-01' =
       {
         name: 'appBackendPool'
         properties: {
-          backendAddresses: []
+          backendAddresses: [
+            {
+              fqdn: webApp.properties.defaultHostName
+            }
+          ]
         }
       }
     ]
@@ -300,7 +389,11 @@ resource applicationGateway 'Microsoft.Network/applicationGateways@2023-05-01' =
           port: 443
           protocol: 'Https'
           cookieBasedAffinity: 'Disabled'
-          requestTimeout: 20
+          requestTimeout: 30
+          pickHostNameFromBackendAddress: true
+          probe: {
+            id: resourceId('Microsoft.Network/applicationGateways/probes', appGwName, 'appHealthProbe')
+          }
         }
       }
     ]
@@ -336,9 +429,22 @@ resource applicationGateway 'Microsoft.Network/applicationGateways@2023-05-01' =
         }
       }
     ]
+    probes: [
+      {
+        name: 'appHealthProbe'
+        properties: {
+          protocol: 'Https'
+          path: '/'
+          interval: 30
+          timeout: 30
+          unhealthyThreshold: 3
+          pickHostNameFromBackendHttpSettings: true
+        }
+      }
+    ]
     webApplicationFirewallConfiguration: {
       enabled: true
-      firewallMode: 'Prevention'
+      firewallMode: enableWafPrevention ? 'Prevention' : 'Detection'
       ruleSetType: 'OWASP'
       ruleSetVersion: '3.2'
     }
@@ -349,10 +455,10 @@ resource applicationGateway 'Microsoft.Network/applicationGateways@2023-05-01' =
 }
 
 // ============================================================================
-// AZURE FIREWALL (Optional)
+// AZURE FIREWALL
 // ============================================================================
 
-resource firewallPublicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = if (deployFirewall) {
+resource firewallPublicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
   name: firewallPublicIpName
   location: location
   tags: commonTags
@@ -364,7 +470,7 @@ resource firewallPublicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = if 
   }
 }
 
-resource firewall 'Microsoft.Network/azureFirewalls@2023-05-01' = if (deployFirewall) {
+resource firewall 'Microsoft.Network/azureFirewalls@2023-05-01' = {
   name: firewallName
   location: location
   tags: commonTags
@@ -378,11 +484,190 @@ resource firewall 'Microsoft.Network/azureFirewalls@2023-05-01' = if (deployFire
         name: 'firewallIpConfig'
         properties: {
           subnet: {
-            id: virtualNetwork.properties.subnets[1].id
+            id: '${virtualNetwork.id}/subnets/AzureFirewallSubnet'
           }
           publicIPAddress: {
             id: firewallPublicIp.id
           }
+        }
+      }
+    ]
+    networkRuleCollections: [
+      {
+        name: 'AllowWebTraffic'
+        properties: {
+          priority: 100
+          action: {
+            type: 'Allow'
+          }
+          rules: [
+            {
+              name: 'AllowHTTP'
+              protocols: [
+                'TCP'
+              ]
+              sourceAddresses: [
+                appSubnetPrefix
+              ]
+              destinationAddresses: [
+                '*'
+              ]
+              destinationPorts: [
+                '80'
+                '443'
+              ]
+            }
+          ]
+        }
+      }
+    ]
+    applicationRuleCollections: [
+      {
+        name: 'AllowAzureServices'
+        properties: {
+          priority: 200
+          action: {
+            type: 'Allow'
+          }
+          rules: [
+            {
+              name: 'AllowWindowsUpdate'
+              protocols: [
+                {
+                  protocolType: 'Http'
+                  port: 80
+                }
+                {
+                  protocolType: 'Https'
+                  port: 443
+                }
+              ]
+              sourceAddresses: [
+                appSubnetPrefix
+              ]
+              targetFqdns: [
+                '*.microsoft.com'
+                '*.windows.com'
+                '*.azure.com'
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+
+// Update route table with firewall IP after firewall is deployed
+resource routeToFirewall 'Microsoft.Network/routeTables/routes@2023-05-01' = {
+  parent: routeTable
+  name: 'route-to-firewall'
+  properties: {
+    addressPrefix: '0.0.0.0/0'
+    nextHopType: 'VirtualAppliance'
+    nextHopIpAddress: firewall.properties.ipConfigurations[0].properties.privateIPAddress
+  }
+}
+
+// ============================================================================
+// APP SERVICE PLAN & WEB APP
+// ============================================================================
+
+resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
+  name: appServicePlanName
+  location: location
+  tags: commonTags
+  sku: {
+    name: 'B1'
+    tier: 'Basic'
+    size: 'B1'
+    family: 'B'
+    capacity: 1
+  }
+  kind: 'linux'
+  properties: {
+    reserved: true
+  }
+}
+
+resource webApp 'Microsoft.Web/sites@2023-01-01' = {
+  name: webAppName
+  location: location
+  tags: commonTags
+  kind: 'app,linux'
+  properties: {
+    serverFarmId: appServicePlan.id
+    httpsOnly: true
+    virtualNetworkSubnetId: '${virtualNetwork.id}/subnets/AppIntegrationSubnet'
+    publicNetworkAccess: 'Disabled'
+    siteConfig: {
+      linuxFxVersion: 'NODE|20-lts'
+      alwaysOn: true
+      minTlsVersion: '1.2'
+      ftpsState: 'Disabled'
+      http20Enabled: true
+      vnetRouteAllEnabled: true
+    }
+  }
+}
+
+// ============================================================================
+// PRIVATE DNS ZONE
+// ============================================================================
+
+resource privateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: privateDnsZoneName
+  location: 'global'
+  tags: commonTags
+}
+
+resource privateDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: privateDnsZone
+  name: '${vnetName}-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: virtualNetwork.id
+    }
+  }
+}
+
+// ============================================================================
+// PRIVATE ENDPOINT
+// ============================================================================
+
+resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
+  name: privateEndpointName
+  location: location
+  tags: commonTags
+  properties: {
+    subnet: {
+      id: '${virtualNetwork.id}/subnets/PrivateEndpointSubnet'
+    }
+    privateLinkServiceConnections: [
+      {
+        name: 'webapp-connection'
+        properties: {
+          privateLinkServiceId: webApp.id
+          groupIds: [
+            'sites'
+          ]
+        }
+      }
+    ]
+  }
+}
+
+resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-05-01' = {
+  parent: privateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'config1'
+        properties: {
+          privateDnsZoneId: privateDnsZone.id
         }
       }
     ]
@@ -396,20 +681,32 @@ resource firewall 'Microsoft.Network/azureFirewalls@2023-05-01' = if (deployFire
 @description('Resource group name')
 output resourceGroupName string = resourceGroup().name
 
-@description('Virtual Network name')
-output virtualNetworkName string = virtualNetwork.name
+@description('Virtual Network ID')
+output vnetId string = virtualNetwork.id
 
-@description('Application Gateway name')
-output applicationGatewayName string = applicationGateway.name
+@description('Application Gateway public IP address')
+output appGatewayPublicIp string = appGwPublicIp.properties.ipAddress
 
-@description('Application Gateway public IP')
-output applicationGatewayPublicIp string = appGwPublicIp.properties.ipAddress
+@description('Application Gateway FQDN')
+output appGatewayFqdn string = appGwPublicIp.properties.dnsSettings.fqdn
 
-@description('WAF Policy name')
-output wafPolicyName string = wafPolicy.name
+@description('Azure Firewall private IP address')
+output firewallPrivateIp string = firewall.properties.ipConfigurations[0].properties.privateIPAddress
 
-@description('Azure Firewall name')
-output firewallName string = deployFirewall ? firewall.name : 'Not deployed'
+@description('Web App name')
+output webAppName string = webApp.name
+
+@description('Web App default hostname (internal)')
+output webAppHostName string = webApp.properties.defaultHostName
+
+@description('Private Endpoint ID')
+output webAppPrivateEndpoint string = privateEndpoint.id
+
+@description('Private DNS Zone name')
+output privateDnsZoneName string = privateDnsZone.name
+
+@description('WAF Policy mode')
+output wafMode string = enableWafPrevention ? 'Prevention' : 'Detection'
 
 @description('List of deployed resources')
 output deployedResources array = [
@@ -417,6 +714,26 @@ output deployedResources array = [
     type: 'Microsoft.Network/virtualNetworks'
     name: virtualNetwork.name
     id: virtualNetwork.id
+  }
+  {
+    type: 'Microsoft.Network/networkSecurityGroups'
+    name: nsgAppGw.name
+    id: nsgAppGw.id
+  }
+  {
+    type: 'Microsoft.Network/networkSecurityGroups'
+    name: nsgApp.name
+    id: nsgApp.id
+  }
+  {
+    type: 'Microsoft.Network/networkSecurityGroups'
+    name: nsgPeSubnet.name
+    id: nsgPeSubnet.id
+  }
+  {
+    type: 'Microsoft.Network/routeTables'
+    name: routeTable.name
+    id: routeTable.id
   }
   {
     type: 'Microsoft.Network/applicationGateways'
@@ -427,6 +744,36 @@ output deployedResources array = [
     type: 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies'
     name: wafPolicy.name
     id: wafPolicy.id
+  }
+  {
+    type: 'Microsoft.Network/azureFirewalls'
+    name: firewall.name
+    id: firewall.id
+  }
+  {
+    type: 'Microsoft.Web/serverfarms'
+    name: appServicePlan.name
+    id: appServicePlan.id
+  }
+  {
+    type: 'Microsoft.Web/sites'
+    name: webApp.name
+    id: webApp.id
+  }
+  {
+    type: 'Microsoft.Network/privateEndpoints'
+    name: privateEndpoint.name
+    id: privateEndpoint.id
+  }
+  {
+    type: 'Microsoft.Network/privateDnsZones'
+    name: privateDnsZone.name
+    id: privateDnsZone.id
+  }
+  {
+    type: 'Microsoft.OperationalInsights/workspaces'
+    name: logAnalytics.name
+    id: logAnalytics.id
   }
 ]
 

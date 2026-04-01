@@ -94,3 +94,84 @@
 - **Outputs:** workspaceId, keyVaultUri, storageAccountName, automationAccountId, recoveryVaultId, budgetName, actionGroupId, networkWatcherId, deployedResources array (6 resources), deploymentTimestamp
 - **Cost Target:** ~$15-30/day (mostly Log Analytics ingestion + Recovery Services Vault storage)
 - **Quality Bar:** Matches Wave 1 patterns quality - complete resource definitions, no TODOs, valid syntax, comprehensive outputs, proper tagging, security by default
+
+### 2026-03-31: Microservices on AKS Pattern Infrastructure Complete
+- **Deliverable:** Complete, production-ready Bicep template for Microservices on Azure Kubernetes Service pattern
+- **Pattern Architecture:** AKS cluster with Azure CNI networking, managed identity, Container Registry integration, Key Vault secrets, and comprehensive monitoring
+- **Resources Deployed:**
+  - AKS cluster (Kubernetes 1.29, system node pool with 2x Standard_B2s nodes, Azure CNI networking, VNet integration)
+  - Azure Container Registry (Basic SKU for cost efficiency, admin user disabled, Azure Services bypass)
+  - Key Vault (RBAC authorization, soft delete 90 days, purge protection enabled, public access with Azure Services bypass)
+  - Virtual Network (10.1.0.0/16 with 2 subnets: AKS subnet 10.1.0.0/20, Services subnet 10.1.16.0/24)
+  - Log Analytics workspace (30-day retention, PerGB2018 SKU, resource permissions enabled)
+  - Application Insights (connected to Log Analytics, workspace-based ingestion mode)
+- **AKS Features:** 
+  - RBAC enabled with Azure AD integration (managed AAD, Azure RBAC enabled)
+  - Workload Identity enabled (OIDC issuer profile for pod identity)
+  - Azure CNI networking with Azure Network Policy (service CIDR 10.2.0.0/16)
+  - OMS agent addon for Container Insights (Log Analytics integration with AAD auth)
+  - Azure Key Vault Secrets Provider addon (CSI driver with secret rotation every 2 minutes)
+  - System node pool (2 nodes, Standard_B2s, 30 max pods, no auto-scaling for cost control)
+  - Standard load balancer SKU
+- **Security Features:**
+  - Managed identities throughout (AKS system assigned identity + kubelet identity)
+  - RBAC role assignments: AKS kubelet identity → AcrPull on ACR, AKS managed identity → Key Vault Secrets User
+  - Key Vault RBAC authorization (no access policies), soft delete + purge protection
+  - ACR admin user disabled, private container registry pattern ready
+  - VNet subnets with private endpoint network policies disabled (ready for private endpoints)
+- **Monitoring & Observability:**
+  - Container Insights (OMS agent) sending metrics and logs to Log Analytics
+  - Application Insights for application-level telemetry
+  - Auto-scaler profile configured (10-minute delays for scale-down operations)
+- **ARM JSON Generation:** Valid azuredeploy.json (14.47 KB) compiled from Bicep for Azure Portal Deploy button
+- **Parameters File:** dev.parameters.json with cost-efficient defaults (2 nodes, B2s VMs, Basic ACR, Kubernetes 1.29, 48-hour TTL)
+- **Architecture Diagram:** Updated architecture.mmd to accurately reflect 6 deployed resources with VNet topology, subnet details, RBAC relationships, CSI driver integration
+- **Bicep Validation:** Successfully compiles with az bicep build (only BCP334 warning for ACR name minimum length - acceptable for generated names)
+- **Resource Naming:** Consistent patterns using ${prefix}-${uniqueString(resourceGroup().id)} suffix, abbreviations follow Azure CAF standards (aks-, acr, kv-, vnet-, log-, appi-)
+- **Outputs:** aksClusterName, aksClusterFqdn, acrLoginServer, keyVaultUri, workspaceId, appInsightsInstrumentationKey, appInsightsConnectionString, vnetId, aksSubnetId, getCredentialsCommand, deployedResources array (6 resources), deploymentTimestamp
+- **Cost Target:** ~$80-150/day (AKS nodes are main driver: 2x B2s ~$60-70/day, Log Analytics ~$10-20/day, ACR Basic ~$5/day, other services <$10/day)
+- **Quality Bar:** Matches Wave 1 and Wave 2 quality - complete resource definitions, no TODOs, valid syntax, comprehensive outputs, proper tagging, security by default
+- **Pattern Comparison:** Removed Application Gateway from scaffold (adds ~$125/day cost), focused on core microservices infrastructure with ingress controller pattern (deploy NGINX/Traefik to AKS after provisioning for ~$0 cost)
+
+### 2026-04-01: Zero Trust Network Access Pattern Infrastructure Complete
+- **Deliverable:** Complete, production-ready Bicep template for Zero Trust Network Access pattern with comprehensive security controls
+- **Pattern Architecture:** Defense-in-depth architecture with Application Gateway WAF v2, Azure Firewall, Private Link, NSGs with deny-all defaults, and VNet segmentation
+- **Resources Deployed:**
+  - Virtual Network (10.0.0.0/16 with 4 subnets: AppGateway 10.0.1.0/24, Firewall 10.0.2.0/24, AppIntegration 10.0.3.0/24, PrivateEndpoint 10.0.4.0/24)
+  - Application Gateway (WAF_v2 tier, 2 instances, OWASP 3.2 ruleset, configurable Prevention/Detection mode, health probes)
+  - Azure Firewall (Standard tier, network rules for HTTP/HTTPS, application rules for Azure services)
+  - 3 Network Security Groups (AppGateway subnet: allows GatewayManager + HTTP/HTTPS; App subnet: VNet-only inbound; PE subnet: VNet-only inbound)
+  - Route Table (directs app subnet traffic through firewall for east-west inspection)
+  - App Service Plan (B1 Basic Linux, reserved for Linux containers)
+  - Web App (Node.js 20 LTS, VNet integration with app subnet delegation, public access disabled, HTTPS only, TLS 1.2 minimum, alwaysOn enabled)
+  - Private Endpoint (connects to Web App, deployed in dedicated PE subnet)
+  - Private DNS Zone (privatelink.azurewebsites.net with VNet link and DNS zone group for automatic registration)
+  - Log Analytics workspace (30-day retention, PerGB2018 SKU for cost monitoring)
+  - 2 Public IPs (Standard SKU for Application Gateway and Azure Firewall)
+- **Zero Trust Principles Implemented:**
+  - **Verify Explicitly:** WAF inspects all inbound traffic with OWASP 3.2 rules, Firewall inspects all outbound/east-west traffic
+  - **Least Privilege Access:** NSGs deny all inbound by default, only allow internal VNet traffic, Web App has no public endpoint
+  - **Assume Breach:** Defense-in-depth layers (WAF → NSG → Firewall → Private Link), route table forces traffic inspection, network segmentation isolates components
+- **Security Features:**
+  - WAF in configurable Prevention/Detection mode (parameter: enableWafPrevention, default: true)
+  - Application Gateway with backend health probes (30s interval, HTTPS protocol, picks hostname from backend)
+  - Azure Firewall with network rules (allow HTTP/HTTPS from app subnet) and application rules (allow Azure services FQDNs)
+  - Route table automatically configured with firewall private IP as next hop (breaks circular dependency via child route resource)
+  - Web App with VNet integration (subnet delegation to Microsoft.Web/serverFarms), public access disabled, minimum TLS 1.2
+  - Private Endpoint with automatic DNS registration (privatelink DNS zone + VNet link + zone group)
+  - NSG rules: AppGateway allows GatewayManager (65200-65535), HTTP (80), HTTPS (443); App/PE subnets allow VNet inbound only, deny all else
+- **Networking Architecture:**
+  - 4 dedicated subnets (AppGateway, Firewall, AppIntegration with delegation + route table, PrivateEndpoint)
+  - AppIntegrationSubnet has Microsoft.Web/serverFarms delegation for VNet integration, attached route table for firewall routing
+  - PrivateEndpointSubnet has privateEndpointNetworkPolicies disabled for private link support
+  - Web App uses vnetRouteAllEnabled to force all outbound traffic through VNet (including to Azure services)
+- **Circular Dependency Resolution:** Route table created with empty routes array, firewall deployed, then route added as child resource (Microsoft.Network/routeTables/routes) to break VNet → RouteTable → Firewall cycle
+- **ARM JSON Generation:** Valid azuredeploy.json (30.08 KB) compiled from Bicep for Azure Portal Deploy button
+- **Parameters File:** dev.parameters.json with cost-efficient defaults (enableWafPrevention: true, 48-hour TTL)
+- **Architecture Diagram:** Updated architecture.mmd to show complete topology with 4 subnets, NSGs, route table, firewall traffic flow, private link connection, VNet integration
+- **Bicep Validation:** Successfully compiles with az bicep build (warnings only, no errors)
+- **Resource Naming:** Consistent patterns using ${prefix}- suffix, abbreviations follow Azure CAF standards (vnet-, nsg-, agw-, pip-, fw-, waf-, log-, rt-, asp-, app-, pe-, private DNS zone)
+- **Outputs:** vnetId, appGatewayPublicIp, appGatewayFqdn, firewallPrivateIp, webAppName, webAppHostName, webAppPrivateEndpoint, privateDnsZoneName, wafMode, deployedResources array (13 resources), deploymentTimestamp
+- **Cost Target:** ~$35-60/day (Application Gateway WAF_v2 ~$125/mo base + $ .008/hr/unit = ~$130/mo, Azure Firewall Standard ~$1.25/hr = ~$900/mo, App Service B1 ~$13/mo, total ~$1050-1800/mo or $35-60/day - cost drivers are AppGW WAF and Firewall)
+- **Quality Bar:** Matches all previous patterns - complete resource definitions, no TODOs, valid syntax, comprehensive outputs, proper tagging, security by default, production-ready
+- **Pattern Decisions:** Firewall always deployed (not optional) because route table depends on it, WAF mode configurable via parameter, Web App uses VNet integration + Private Endpoint for double isolation

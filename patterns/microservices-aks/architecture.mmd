@@ -1,46 +1,51 @@
 graph TB
-    subgraph "Azure Virtual Network"
-        subgraph "App Gateway Subnet"
-            AGW[Application<br/>Gateway + WAF]
-        end
-        
-        subgraph "AKS Subnet"
-            AKS[AKS Cluster<br/>System Pool]
+    subgraph "Azure Virtual Network (10.1.0.0/16)"
+        subgraph "AKS Subnet (10.1.0.0/20)"
+            AKS[AKS Cluster<br/>Kubernetes 1.29<br/>System Node Pool<br/>2x Standard_B2s]
             POD1[Pod: Service A]
             POD2[Pod: Service B]
             POD3[Pod: Service C]
         end
+        
+        subgraph "Services Subnet (10.1.16.0/24)"
+            SVC[Additional Services<br/>Private Endpoints]
+        end
     end
     
     subgraph "Supporting Services"
-        ACR[Container<br/>Registry]
-        KV[Key Vault<br/>CSI Driver]
-        MON[Container<br/>Insights]
+        ACR[Container Registry<br/>Basic SKU<br/>ACR Pull RBAC]
+        KV[Key Vault<br/>RBAC Auth<br/>Soft Delete 90d<br/>Purge Protection]
+        LOG[Log Analytics<br/>30-day Retention<br/>PerGB2018]
+        APPI[Application Insights<br/>Connected to LA]
     end
     
-    User[External Client] -->|HTTPS| AGW
-    AGW -->|Route| AKS
+    User[External Client] -->|kubectl/HTTPS| AKS
     AKS --> POD1
     AKS --> POD2
     AKS --> POD3
     
-    POD1 -.->|Pull Images| ACR
-    POD2 -.->|Pull Images| ACR
-    POD3 -.->|Pull Images| ACR
+    POD1 -.->|Pull Images<br/>Kubelet Identity| ACR
+    POD2 -.->|Pull Images<br/>Kubelet Identity| ACR
+    POD3 -.->|Pull Images<br/>Kubelet Identity| ACR
     
-    POD1 -.->|Get Secrets| KV
-    POD2 -.->|Get Secrets| KV
+    POD1 -.->|Get Secrets<br/>CSI Driver| KV
+    POD2 -.->|Get Secrets<br/>CSI Driver| KV
     
-    AKS -.->|Metrics & Logs| MON
+    AKS -.->|OMS Agent<br/>Metrics & Logs| LOG
+    AKS -.->|Telemetry| APPI
+    LOG -->|Workspace| APPI
     
-    classDef gateway fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    AKS -.->|Secrets User RBAC| KV
+    
+    classDef vnet fill:#E8F4FD,stroke:#0078D4,stroke-width:2px,color:#000
     classDef aks fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
     classDef pods fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
     classDef support fill:#00BCF2,stroke:#000,stroke-width:2px,color:#000
     classDef user fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
+    classDef monitor fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
     
-    class AGW gateway
     class AKS aks
     class POD1,POD2,POD3 pods
-    class ACR,KV,MON support
+    class ACR,KV,SVC support
+    class LOG,APPI monitor
     class User user
