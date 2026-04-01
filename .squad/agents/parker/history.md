@@ -175,3 +175,30 @@
 - **Cost Target:** ~$35-60/day (Application Gateway WAF_v2 ~$125/mo base + $ .008/hr/unit = ~$130/mo, Azure Firewall Standard ~$1.25/hr = ~$900/mo, App Service B1 ~$13/mo, total ~$1050-1800/mo or $35-60/day - cost drivers are AppGW WAF and Firewall)
 - **Quality Bar:** Matches all previous patterns - complete resource definitions, no TODOs, valid syntax, comprehensive outputs, proper tagging, security by default, production-ready
 - **Pattern Decisions:** Firewall always deployed (not optional) because route table depends on it, WAF mode configurable via parameter, Web App uses VNet integration + Private Endpoint for double isolation
+
+### 2026-04-01T10:33:23Z : Data Analytics Pipeline Pattern Complete
+- **Pattern:** data-analytics-pipeline - Final pattern implementation (8th of 8 patterns)
+- **Resources Deployed:** 
+  - Azure Data Lake Storage Gen2 (HNS enabled, hot tier, TLS 1.2, 2 containers: raw + curated)
+  - Azure Synapse Analytics Workspace (managed identity, managed VNet, serverless SQL pool built-in)
+  - Azure Data Factory (managed identity, orchestration engine)
+  - Azure Key Vault (RBAC auth, soft delete, stores SQL admin password)
+  - Log Analytics workspace (30-day retention, diagnostics for Synapse + ADF)
+  - Optional Synapse Spark Pool (3-10 node auto-scale, 15min auto-pause) - disabled by default due to cost
+- **Security Posture:**
+  - Managed identities on Synapse and ADF for passwordless authentication
+  - RBAC role assignments: Synapse → Storage Blob Data Contributor, ADF → Storage Blob Data Contributor
+  - Key Vault stores SQL admin credentials with RBAC-based access control
+  - HTTPS-only storage, minimal TLS 1.2, public blob access disabled
+  - Data Lake firewall allows Azure services, managed VNet for Synapse
+  - Diagnostic settings route Synapse and ADF logs to Log Analytics
+- **Parameters:** location, prefix, tags (owner/workload/environment/ttlHours), sqlAdminLogin (default: 'sqladmin'), sqlAdminPassword (secure), enableSynapseSparkPool (bool, default: false)
+- **Outputs:** synapseWorkspaceUrl, dataFactoryName, dataLakeStorageEndpoint, keyVaultUri, workspaceId, resourceGroupName, deployedResources array, deploymentTimestamp
+- **Naming Convention:** Globally unique names using uniqueString() - {prefix}adls{hash}, {prefix}synw{hash}, {prefix}adf{hash}, {prefix}kv{hash12}
+- **Cost Model:** ~\-30/day (Synapse workspace + serverless SQL is pay-per-query), ~\-150/day if Spark pool enabled - designed for cost-conscious demos
+- **Architecture Diagram:** Updated architecture.mmd with top-down flow showing orchestration (ADF), storage zones (Data Lake), analytics engines (Synapse serverless + Spark), security (Key Vault, Log Analytics), and consumption layer (Power BI, Apps, ML)
+- **Bicep Quality:** Clean build, no warnings, all parameters annotated with @description, standard outputs, proper resource dependencies, conditional Spark pool deployment
+- **ARM Compilation:** azuredeploy.json generated (15KB) for Azure Portal "Deploy to Azure" button compatibility
+- **Parameter File:** dev.parameters.json updated with sqlAdminLogin, sqlAdminPassword, enableSynapseSparkPool, and standard tags
+- **Pattern Status:** Production-ready, fully deployable, serverless SQL pool included (no extra cost), Spark pool optional (expensive add-on)
+- **Key Design Decision:** Default to serverless SQL only (cost-effective), Spark pool opt-in via parameter (expensive but powerful for big data processing)

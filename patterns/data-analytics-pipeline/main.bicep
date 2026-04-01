@@ -1,5 +1,5 @@
 // Data Analytics Pipeline
-// Data Factory, Synapse Analytics, and Storage for modern data warehousing
+// Modern data analytics platform with Azure Data Factory, Synapse Analytics, and Data Lake Storage Gen2
 
 @description('Azure region for deployment')
 param location string = resourceGroup().location
@@ -15,22 +15,15 @@ param tags object = {
   ttlHours: '24'
 }
 
-@description('Storage account SKU')
-param storageSku string = 'Standard_LRS'
-
-@description('Synapse SQL Pool SKU')
-param synapseSqlPoolSku string = 'DW100c'
-
-@description('Deploy Synapse Dedicated SQL Pool')
-param deploySqlPool bool = false
-
 @description('SQL administrator login username')
-@secure()
-param sqlAdministratorLogin string = 'sqladmin'
+param sqlAdminLogin string = 'sqladmin'
 
-@description('SQL administrator password (must meet complexity requirements)')
+@description('SQL administrator password (must meet complexity requirements: 12+ chars, upper, lower, number, special)')
 @secure()
-param sqlAdministratorPassword string
+param sqlAdminPassword string
+
+@description('Enable Synapse Spark Pool (expensive - adds ~$100+/day)')
+param enableSynapseSparkPool bool = false
 
 @description('Deployment timestamp')
 param deploymentTime string = utcNow('u')
@@ -39,18 +32,21 @@ param deploymentTime string = utcNow('u')
 // VARIABLES
 // ============================================================================
 
-var resourceSuffix = '${prefix}-${uniqueString(resourceGroup().id)}'
 var commonTags = union(tags, {
   deployedAt: deploymentTime
   pattern: 'data-analytics-pipeline'
 })
 
-var dataLakeName = 'dls${replace(resourceSuffix, '-', '')}'
-var dataFactoryName = 'adf-${resourceSuffix}'
-var synapseWorkspaceName = 'synapse-${resourceSuffix}'
-var synapseSqlPoolName = 'sqlpool01'
-var keyVaultName = 'kv-${take(replace(resourceSuffix, '-', ''), 24)}'
-var logAnalyticsName = 'log-${resourceSuffix}'
+// Globally unique names with shorter suffixes
+var uniqueSuffix = uniqueString(resourceGroup().id)
+var dataLakeName = '${prefix}adls${uniqueSuffix}'
+var synapseWorkspaceName = '${prefix}synw${uniqueSuffix}'
+var dataFactoryName = '${prefix}adf${uniqueSuffix}'
+var keyVaultName = '${prefix}kv${take(uniqueSuffix, 12)}'
+var logAnalyticsName = '${prefix}-law-${uniqueSuffix}'
+
+// Role definitions
+var storageBlobDataContributorRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 
 // ============================================================================
 // STORAGE - DATA LAKE GEN2
@@ -61,14 +57,20 @@ resource dataLakeStorage 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   location: location
   tags: commonTags
   sku: {
-    name: storageSku
+    name: 'Standard_LRS'
   }
   kind: 'StorageV2'
   properties: {
     accessTier: 'Hot'
     supportsHttpsTrafficOnly: true
     minimumTlsVersion: 'TLS1_2'
-    isHnsEnabled: true // Hierarchical namespace for Data Lake Gen2
+    isHnsEnabled: true
+    allowBlobPublicAccess: false
+    publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Allow'
+      bypass: 'AzureServices'
+    }
   }
 }
 
@@ -88,14 +90,6 @@ resource rawContainer 'Microsoft.Storage/storageAccounts/blobServices/containers
 resource curatedContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
   parent: blobServices
   name: 'curated'
-  properties: {
-    publicAccess: 'None'
-  }
-}
-
-resource enrichedContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
-  parent: blobServices
-  name: 'enriched'
   properties: {
     publicAccess: 'None'
   }
@@ -134,6 +128,16 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
+    enablePurgeProtection: false
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource sqlAdminPasswordSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'sqlAdminPassword'
+  properties: {
+    value: sqlAdminPassword
   }
 }
 
@@ -151,16 +155,17 @@ resource synapseWorkspace 'Microsoft.Synapse/workspaces@2021-06-01' = {
   properties: {
     defaultDataLakeStorage: {
       accountUrl: dataLakeStorage.properties.primaryEndpoints.dfs
-      filesystem: 'enriched'
+      filesystem: 'curated'
     }
-    sqlAdministratorLogin: sqlAdministratorLogin
-    sqlAdministratorLoginPassword: sqlAdministratorPassword
+    sqlAdministratorLogin: sqlAdminLogin
+    sqlAdministratorLoginPassword: sqlAdminPassword
     managedVirtualNetwork: 'default'
     publicNetworkAccess: 'Enabled'
+    managedResourceGroupName: '${resourceGroup().name}-synapse-managed'
   }
 }
 
-resource synapseFirewallAllowAll 'Microsoft.Synapse/workspaces/firewallRules@2021-06-01' = {
+resource synapseFirewallAllowAzure 'Microsoft.Synapse/workspaces/firewallRules@2021-06-01' = {
   parent: synapseWorkspace
   name: 'AllowAllWindowsAzureIps'
   properties: {
@@ -169,17 +174,57 @@ resource synapseFirewallAllowAll 'Microsoft.Synapse/workspaces/firewallRules@202
   }
 }
 
-resource synapseSqlPool 'Microsoft.Synapse/workspaces/sqlPools@2021-06-01' = if (deploySqlPool) {
+resource synapseSparkPool 'Microsoft.Synapse/workspaces/bigDataPools@2021-06-01' = if (enableSynapseSparkPool) {
   parent: synapseWorkspace
-  name: synapseSqlPoolName
+  name: 'sparkpool'
   location: location
   tags: commonTags
-  sku: {
-    name: synapseSqlPoolSku
-  }
   properties: {
-    createMode: 'Default'
-    collation: 'SQL_Latin1_General_CP1_CI_AS'
+    nodeSize: 'Small'
+    nodeSizeFamily: 'MemoryOptimized'
+    autoScale: {
+      enabled: true
+      minNodeCount: 3
+      maxNodeCount: 10
+    }
+    autoPause: {
+      enabled: true
+      delayInMinutes: 15
+    }
+    sparkVersion: '3.4'
+    isComputeIsolationEnabled: false
+  }
+}
+
+resource synapseDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'synapse-diagnostics'
+  scope: synapseWorkspace
+  properties: {
+    workspaceId: logAnalytics.id
+    logs: [
+      {
+        category: 'SynapseRbacOperations'
+        enabled: true
+      }
+      {
+        category: 'GatewayApiRequests'
+        enabled: true
+      }
+      {
+        category: 'SQLSecurityAuditEvents'
+        enabled: true
+      }
+      {
+        category: 'BuiltinSqlReqsEnded'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
   }
 }
 
@@ -199,8 +244,47 @@ resource dataFactory 'Microsoft.DataFactory/factories@2018-06-01' = {
   }
 }
 
-// Grant Data Factory access to storage
-var storageBlobDataContributorRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+resource dataFactoryDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'adf-diagnostics'
+  scope: dataFactory
+  properties: {
+    workspaceId: logAnalytics.id
+    logs: [
+      {
+        category: 'ActivityRuns'
+        enabled: true
+      }
+      {
+        category: 'PipelineRuns'
+        enabled: true
+      }
+      {
+        category: 'TriggerRuns'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
+  }
+}
+
+// ============================================================================
+// ROLE ASSIGNMENTS
+// ============================================================================
+
+resource synapseStorageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(dataLakeStorage.id, synapseWorkspace.id, storageBlobDataContributorRole)
+  scope: dataLakeStorage
+  properties: {
+    roleDefinitionId: storageBlobDataContributorRole
+    principalId: synapseWorkspace.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
 
 resource dataFactoryStorageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(dataLakeStorage.id, dataFactory.id, storageBlobDataContributorRole)
@@ -216,23 +300,23 @@ resource dataFactoryStorageRoleAssignment 'Microsoft.Authorization/roleAssignmen
 // OUTPUTS
 // ============================================================================
 
-@description('Resource group name')
-output resourceGroupName string = resourceGroup().name
-
-@description('Data Lake Storage account name')
-output dataLakeStorageName string = dataLakeStorage.name
+@description('Synapse Workspace URL')
+output synapseWorkspaceUrl string = 'https://${synapseWorkspace.name}.dev.azuresynapse.net'
 
 @description('Data Factory name')
 output dataFactoryName string = dataFactory.name
 
-@description('Synapse Workspace name')
-output synapseWorkspaceName string = synapseWorkspace.name
+@description('Data Lake Storage endpoint')
+output dataLakeStorageEndpoint string = dataLakeStorage.properties.primaryEndpoints.dfs
 
-@description('Synapse Workspace URL')
-output synapseWorkspaceUrl string = 'https://${synapseWorkspace.name}.dev.azuresynapse.net'
+@description('Key Vault URI')
+output keyVaultUri string = keyVault.properties.vaultUri
 
-@description('Key Vault name')
-output keyVaultName string = keyVault.name
+@description('Log Analytics workspace ID')
+output workspaceId string = logAnalytics.id
+
+@description('Resource group name')
+output resourceGroupName string = resourceGroup().name
 
 @description('List of deployed resources')
 output deployedResources array = [
@@ -255,6 +339,11 @@ output deployedResources array = [
     type: 'Microsoft.KeyVault/vaults'
     name: keyVault.name
     id: keyVault.id
+  }
+  {
+    type: 'Microsoft.OperationalInsights/workspaces'
+    name: logAnalytics.name
+    id: logAnalytics.id
   }
 ]
 

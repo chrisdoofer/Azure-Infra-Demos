@@ -8,20 +8,14 @@
     "prefix": {
       "value": "demo"
     },
-    "storageSku": {
-      "value": "Standard_LRS"
-    },
-    "synapseSqlPoolSku": {
-      "value": "DW100c"
-    },
-    "deploySqlPool": {
-      "value": false
-    },
-    "sqlAdministratorLogin": {
+    "sqlAdminLogin": {
       "value": "sqladmin"
     },
-    "sqlAdministratorPassword": {
+    "sqlAdminPassword": {
       "value": "REPLACE_WITH_SECURE_PASSWORD"
+    },
+    "enableSynapseSparkPool": {
+      "value": false
     },
     "tags": {
       "value": {

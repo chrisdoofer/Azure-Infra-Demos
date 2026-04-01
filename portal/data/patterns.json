@@ -148,16 +148,16 @@
     "estimatedCostBand": "high",
     "complexity": 3,
     "typicalDeployTimeMinutes": 20,
-    "deploymentModesSupported": [],
+    "deploymentModesSupported": ["portal", "actions"],
     "templatePath": "patterns/data-analytics-pipeline/azuredeploy.json",
     "actionsWorkflowInputsExample": {
       "resourceGroupName": "rg-data-analytics",
-      "location": "eastus2",
-      "dataLakeStorageName": "dlsprodanalytics",
-      "synapseSqlPoolSku": "DW100c",
-      "enableSparkPool": "true"
+      "location": "australiaeast",
+      "prefix": "demo",
+      "sqlAdminLogin": "sqladmin",
+      "enableSynapseSparkPool": "false"
     },
-    "lastReviewedDate": "2024-02-28"
+    "lastReviewedDate": "2026-04-01"
   },
   {
     "id": "pat-008",

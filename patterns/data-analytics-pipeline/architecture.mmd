@@ -1,56 +1,72 @@
-graph LR
+graph TB
     subgraph "Data Sources"
         SRC1[On-Premises DB]
-        SRC2[SaaS Apps]
-        SRC3[IoT Devices]
+        SRC2[SaaS Applications]
+        SRC3[IoT/Streaming Data]
     end
     
-    subgraph "Ingestion Layer"
-        ADF[Azure Data Factory<br/>ETL Pipelines]
+    subgraph "Orchestration & Ingestion"
+        ADF[Azure Data Factory<br/>Pipeline Orchestration<br/>Managed Identity]
     end
     
-    subgraph "Storage Layer - Data Lake Gen2"
-        RAW[Raw Zone<br/>Bronze]
-        CURATED[Curated Zone<br/>Silver]
-        ENRICHED[Enriched Zone<br/>Gold]
+    subgraph "Storage - Data Lake Gen2"
+        ADLS[Azure Data Lake Storage<br/>HNS Enabled, TLS 1.2]
+        RAW[Raw Container<br/>Landing Zone]
+        CURATED[Curated Container<br/>Transformed Data]
     end
     
-    subgraph "Analytics Layer"
-        SYNAPSE[Synapse Analytics<br/>SQL Pools]
-        SERVERLESS[Serverless SQL]
-        SPARK[Spark Pools]
+    subgraph "Analytics & Processing"
+        SYNAPSE[Synapse Analytics Workspace<br/>Managed Identity, Managed VNet]
+        SERVERLESS[Serverless SQL Pool<br/>Built-in, On-demand]
+        SPARK[Spark Pool - Optional<br/>3-10 nodes, Auto-pause 15min]
     end
     
-    subgraph "Consumption"
-        POWERBI[Power BI]
-        ML[ML Models]
-        APPS[Applications]
+    subgraph "Security & Monitoring"
+        KV[Key Vault<br/>RBAC Auth, Soft Delete<br/>SQL Admin Password]
+        LAW[Log Analytics<br/>30-day Retention<br/>Synapse & ADF Logs]
+    end
+    
+    subgraph "Consumption Layer"
+        POWERBI[Power BI<br/>Reports & Dashboards]
+        APPS[Custom Applications<br/>APIs & Services]
+        ML[ML/AI Workloads<br/>Spark Processing]
     end
     
     SRC1 -->|Ingest| ADF
     SRC2 -->|Ingest| ADF
     SRC3 -->|Ingest| ADF
     
-    ADF -->|Land| RAW
-    RAW -->|Transform| CURATED
-    CURATED -->|Enrich| ENRICHED
+    ADF -->|Land Raw Data| RAW
+    RAW -->|Transform & Validate| CURATED
     
-    ENRICHED -->|Query| SYNAPSE
-    ENRICHED -->|Query| SERVERLESS
-    ENRICHED -->|Process| SPARK
+    CURATED -->|Query| SERVERLESS
+    CURATED -->|Process| SPARK
+    CURATED -->|Analyze| SYNAPSE
     
-    SYNAPSE --> POWERBI
-    SYNAPSE --> APPS
+    SERVERLESS --> POWERBI
+    SERVERLESS --> APPS
     SPARK --> ML
+    SYNAPSE --> POWERBI
+    
+    ADF -.->|Read Secrets| KV
+    SYNAPSE -.->|Credentials| KV
+    
+    ADF -->|Activity Logs| LAW
+    SYNAPSE -->|Query Logs| LAW
+    
+    ADF -.->|Storage Blob Data Contributor| ADLS
+    SYNAPSE -.->|Storage Blob Data Contributor| ADLS
     
     classDef source fill:#107C10,stroke:#000,stroke-width:2px,color:#fff
-    classDef etl fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
+    classDef orchestration fill:#FFB900,stroke:#000,stroke-width:2px,color:#000
     classDef storage fill:#50E6FF,stroke:#000,stroke-width:2px,color:#000
     classDef analytics fill:#0078D4,stroke:#000,stroke-width:2px,color:#fff
-    classDef consume fill:#E81123,stroke:#000,stroke-width:2px,color:#fff
+    classDef security fill:#E81123,stroke:#000,stroke-width:2px,color:#fff
+    classDef consume fill:#8661C5,stroke:#000,stroke-width:2px,color:#fff
     
     class SRC1,SRC2,SRC3 source
-    class ADF etl
-    class RAW,CURATED,ENRICHED storage
+    class ADF orchestration
+    class ADLS,RAW,CURATED storage
     class SYNAPSE,SERVERLESS,SPARK analytics
-    class POWERBI,ML,APPS consume
+    class KV,LAW security
+    class POWERBI,APPS,ML consume
