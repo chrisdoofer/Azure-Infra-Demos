@@ -202,3 +202,61 @@
 - **Parameter File:** dev.parameters.json updated with sqlAdminLogin, sqlAdminPassword, enableSynapseSparkPool, and standard tags
 - **Pattern Status:** Production-ready, fully deployable, serverless SQL pool included (no extra cost), Spark pool optional (expensive add-on)
 - **Key Design Decision:** Default to serverless SQL only (cost-effective), Spark pool opt-in via parameter (expensive but powerful for big data processing)
+
+
+### 2026-04-01T12:40:55Z : GitHub Actions Workflows Created for All Patterns
+- **Task:** Created individual GitHub Actions workflow_dispatch workflows for all 8 infrastructure patterns
+- **Requestor:** Chris Bennett
+- **Deliverables:**
+  1. deploy-hub-spoke-network.yml - Hub-Spoke Network deployment with firewall/VPN gateway options
+  2. deploy-web-app-private-endpoint.yml - Web App with Private Endpoint, configurable App Service SKU
+  3. deploy-azure-monitor-baseline.yml - Azure Monitor baseline with alert email and retention settings
+  4. deploy-serverless-api.yml - Serverless API with runtime selection (node/python/dotnet/java) and Cosmos DB consistency
+  5. deploy-microservices-aks.yml - AKS microservices with K8s version, node count, and VM size selection
+  6. deploy-landing-zone-foundation.yml - Landing zone with budget alerts and email notifications
+  7. deploy-zero-trust-network.yml - Zero trust network with WAF prevention mode toggle
+  8. deploy-data-analytics-pipeline.yml - Data analytics with SQL credentials and optional Spark pool
+  9. destroy-pattern.yml - Generic resource group deletion workflow with "DELETE" confirmation
+- **Workflow Features:**
+  - OIDC authentication using federated credentials (client-id, tenant-id, subscription-id from secrets)
+  - Pattern-specific inputs based on main.bicep parameters from each pattern
+  - Two-stage execution: Validate (Bicep build) → Deploy (resource group creation + deployment)
+  - Auto-generated resource group names: g-{prefix}-{pattern-slug} or user-specified
+  - Tagged deployments: owner=github.actor, workload=pattern-slug, environment=demo, ttlHours
+  - Deployment summaries with teardown commands in GitHub Step Summary
+  - Azure region selection (7 options: australiaeast, eastus, westus2, northeurope, westeurope, uksouth, southeastasia)
+- **Pattern-Specific Customizations:**
+  - Hub-Spoke: deployFirewall (bool), deployVpnGateway (bool)
+  - Web App: appServiceSku (choice: B1/B2/B3/S1/S2/S3/P1v2/P1v3)
+  - Monitor: alertEmail (string, required), retentionDays (choice: 30/60/90/120/180/365)
+  - Serverless API: functionRuntime (choice: node/python/dotnet/java), cosmosDbConsistency (5 levels)
+  - AKS: kubernetesVersion (1.27/1.28/1.29), nodeCount (1-5), vmSize (5 VM size choices)
+  - Landing Zone: alertEmail, monthlyBudgetAmount (string), logRetentionDays (choice)
+  - Zero Trust: enableWafPrevention (bool, default: true)
+  - Data Analytics: sqlAdminLogin, sqlAdminPassword (secure string), enableSynapseSparkPool (bool)
+- **Destroy Workflow:**
+  - Safety confirmation: requires typing "DELETE" to proceed
+  - Checks resource group existence before deletion
+  - Async deletion with status check command in summary
+  - Handles missing resource groups gracefully
+- **Architecture:**
+  - Used existing deploy.yml as reference for OIDC auth pattern
+  - Analyzed all 8 pattern main.bicep files to extract key parameters
+  - Matched parameter types (bool, string, choice) to GitHub Actions input types
+  - Preserved cost-conscious defaults (ttlHours, SKU selections)
+- **Quality:**
+  - All workflows follow consistent naming: deploy-{pattern-slug}.yml
+  - Each workflow includes detailed deployment summary with pattern-specific details
+  - Proper escaping of special characters in bash commands
+  - Pattern directory paths use environment variables for maintainability
+  - Deployment names include timestamp for uniqueness
+- **User Experience:**
+  - Users can deploy any pattern via GitHub Actions UI with guided inputs
+  - No need to manually type z deployment group create commands
+  - Pre-validated Bicep templates before deployment
+  - Clear teardown instructions in every deployment summary
+  - Optional resource group naming for custom naming conventions
+- **Files Created:** 9 new workflow files in .github/workflows/
+- **Total Workflows:** Now 17 workflows total (8 generic + 8 pattern deploys + 1 destroy)
+- **Ready for Use:** All workflows are production-ready and can be triggered via GitHub Actions UI
+

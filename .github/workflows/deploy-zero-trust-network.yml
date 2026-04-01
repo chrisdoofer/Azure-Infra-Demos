@@ -1,0 +1,104 @@
+name: 'Deploy: Zero Trust Network'
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: 'Azure region'
+        required: true
+        default: 'australiaeast'
+        type: choice
+        options: [australiaeast, eastus, westus2, northeurope, westeurope, uksouth, southeastasia]
+      prefix:
+        description: 'Resource name prefix'
+        required: true
+        default: 'demo'
+        type: string
+      resourceGroupName:
+        description: 'Resource group name (leave empty for auto-generated)'
+        required: false
+        type: string
+      enableWafPrevention:
+        description: 'Enable WAF in Prevention mode (vs Detection)'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PATTERN_SLUG: 'zero-trust-network'
+  PATTERN_DIR: 'patterns/zero-trust-network'
+
+jobs:
+  validate:
+    name: Validate Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Build Bicep
+        run: az bicep build --file ${{ env.PATTERN_DIR }}/main.bicep
+
+  deploy:
+    name: Deploy to Azure
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: azure-demo
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Set Resource Group
+        id: rg
+        run: |
+          if [ -z "${{ inputs.resourceGroupName }}" ]; then
+            echo "name=rg-${{ inputs.prefix }}-${{ env.PATTERN_SLUG }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=${{ inputs.resourceGroupName }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Resource Group
+        run: |
+          az group create \
+            --name ${{ steps.rg.outputs.name }} \
+            --location ${{ inputs.location }} \
+            --tags owner=${{ github.actor }} workload=${{ env.PATTERN_SLUG }} environment=demo ttlHours=24
+      
+      - name: Deploy Pattern
+        run: |
+          az deployment group create \
+            --resource-group ${{ steps.rg.outputs.name }} \
+            --template-file ${{ env.PATTERN_DIR }}/main.bicep \
+            --parameters prefix=${{ inputs.prefix }} location=${{ inputs.location }} \
+            enableWafPrevention=${{ inputs.enableWafPrevention }} \
+            --name deploy-${{ env.PATTERN_SLUG }}-$(date +%Y%m%d%H%M%S)
+      
+      - name: Deployment Summary
+        run: |
+          echo "## ✅ Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pattern:** Zero Trust Network" >> $GITHUB_STEP_SUMMARY
+          echo "**Resource Group:** \`${{ steps.rg.outputs.name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Location:** \`${{ inputs.location }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**WAF Prevention Mode:** ${{ inputs.enableWafPrevention }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Teardown" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "az group delete --name ${{ steps.rg.outputs.name }} --yes --no-wait" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

@@ -93,21 +93,105 @@ Resources deploy to **your** Azure subscription using **your** credentials. No O
 
 ### B. Deploy via GitHub Actions
 
-For repeatable deployments, automation, or CI/CD integration.
+For repeatable deployments, automation, or CI/CD integration. This approach is ideal for demonstrations, team environments, and automated testing.
 
-1. **Fork this repository** to your GitHub account
-2. **Configure OIDC** (see [SECURITY.md](./SECURITY.md) for detailed steps):
-   - Create Azure AD App Registration
-   - Create federated credential for GitHub Actions
-   - Assign Contributor role to service principal
-   - Store secrets in GitHub repository
-3. **Run the deployment workflow**:
-   - Navigate to Actions → "Deploy Pattern"
-   - Click "Run workflow"
-   - Select pattern (e.g., `hub-spoke-network`) and parameters
-   - Monitor deployment progress
+#### Step 1: Fork the Repository
 
-The GitHub Actions workflow deploys to your Azure subscription using the configured service principal. No interactive sign-in required.
+Fork this repository to your own GitHub account. All workflows will run from your fork.
+
+#### Step 2: Configure Azure OIDC
+
+Set up OpenID Connect federation between your GitHub repository and Azure. This eliminates the need for long-lived secrets.
+
+**See [SECURITY.md](./SECURITY.md) for complete step-by-step instructions.** Summary:
+
+1. Create Azure AD App Registration
+2. Create federated credential linking the app to your GitHub repository
+3. Assign Contributor role to the service principal on your subscription
+4. Store three repository secrets in GitHub:
+   - `AZURE_CLIENT_ID` — App Registration client ID
+   - `AZURE_TENANT_ID` — Azure AD tenant ID
+   - `AZURE_SUBSCRIPTION_ID` — Target subscription ID
+
+**Time required**: 10-15 minutes for first-time setup. Reuse the same app registration for all patterns.
+
+#### Step 3: Run a Pattern Deployment Workflow
+
+1. **Navigate to Actions tab** in your forked repository
+2. **Select "Deploy Pattern to Azure"** workflow
+3. **Click "Run workflow"** button
+4. **Fill in the workflow inputs**:
+   - **subscriptionId**: Your Azure subscription ID
+   - **location**: Azure region (e.g., `australiaeast`, `westeurope`, `eastus`)
+   - **prefix**: Resource name prefix (e.g., `demo`, `test`, `yourname`)
+   - **patternSlug**: Pattern directory name (see table below)
+   - **resourceGroupName**: (Optional) Custom resource group name, or leave blank for auto-generated
+   - **extraParamsJson**: (Optional) Additional parameters as JSON (see pattern-specific inputs below)
+5. **Click "Run workflow"** to start the deployment
+
+#### Step 4: Monitor the Deployment
+
+- Watch the workflow run in real-time from the Actions tab
+- The workflow validates the Bicep template before deploying
+- Deployment outputs (e.g., URLs, resource names) are displayed in the workflow summary
+- Deployment artifacts are saved for 7 days
+
+#### Step 5: Teardown Resources
+
+After your demonstration or testing:
+
+**Option A: Use the Destroy Workflow**
+
+1. Navigate to Actions → "Destroy Azure Resources"
+2. Click "Run workflow"
+3. Provide subscription ID, pattern slug, and resource group name
+4. Confirm deletion
+
+**Option B: Use Azure CLI**
+
+```bash
+az group delete --name rg-demo-hub-spoke-network --yes --no-wait
+```
+
+**Option C: Use Azure Portal**
+
+Navigate to Resource Groups → Select resource group → Click "Delete resource group"
+
+#### Available Deployment Workflows
+
+The `deploy.yml` workflow supports all patterns. Specify the **patternSlug** input to deploy your chosen pattern.
+
+| Pattern Name | Pattern Slug | Key Extra Parameters | Estimated Deploy Time |
+|--------------|--------------|---------------------|----------------------|
+| Hub-Spoke Network Topology | `hub-spoke-network` | `deployFirewall` (bool), `deployVpnGateway` (bool) | ~15 min |
+| Serverless API | `serverless-api` | `functionRuntime` (dotnet/node/python), `apimSku` (Consumption/Developer) | ~20 min |
+| Microservices on AKS | `microservices-aks` | `kubernetesVersion` (string), `nodeCount` (int), `vmSize` (string) | ~30 min |
+| Web App with Private Endpoint | `web-app-private-endpoint` | `appServiceSku` (B1/S1/P1v2), `vnetAddressPrefix` (string) | ~15 min |
+| Azure Monitor Baseline | `azure-monitor-baseline` | *(varies by pattern)* | ~10 min |
+| Data Analytics Pipeline | `data-analytics-pipeline` | *(varies by pattern)* | ~25 min |
+| Landing Zone Foundation | `landing-zone-foundation` | *(varies by pattern)* | ~20 min |
+| Zero Trust Network | `zero-trust-network` | *(varies by pattern)* | ~20 min |
+
+**Example: Deploy Hub-Spoke Network with Firewall**
+
+Workflow inputs:
+- **subscriptionId**: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+- **location**: `australiaeast`
+- **prefix**: `demo`
+- **patternSlug**: `hub-spoke-network`
+- **resourceGroupName**: *(leave blank for auto: `rg-demo-hub-spoke-network`)*
+- **extraParamsJson**: `{"deployFirewall": true, "deployVpnGateway": false}`
+
+**Example: Deploy Serverless API with Python Runtime**
+
+Workflow inputs:
+- **subscriptionId**: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+- **location**: `eastus`
+- **prefix**: `myapp`
+- **patternSlug**: `serverless-api`
+- **extraParamsJson**: `{"functionRuntime": "python", "functionRuntimeVersion": "3.11"}`
+
+**Note**: All patterns support the standard inputs (`location`, `prefix`, `tags`). Pattern-specific parameters are passed via `extraParamsJson` in JSON format.
 
 ## Prerequisites
 

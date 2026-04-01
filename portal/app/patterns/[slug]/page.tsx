@@ -7,6 +7,8 @@ import DeployButton from '@/components/DeployButton';
 import CostBadge from '@/components/CostBadge';
 import ComplexityIndicator from '@/components/ComplexityIndicator';
 import TalkTrackViewer from '@/components/TalkTrackViewer';
+import BicepViewer from '@/components/BicepViewer';
+import ActionsDeploySection from '@/components/ActionsDeploySection';
 
 export async function generateStaticParams() {
   const patterns = loadPatterns();
@@ -28,6 +30,14 @@ export default function PatternDetailPage({ params }: { params: { slug: string }
     talkTrackContent = fs.readFileSync(talkTrackPath, 'utf-8');
   } catch {
     talkTrackContent = '';
+  }
+
+  let bicepContent = '';
+  try {
+    const bicepPath = path.join(process.cwd(), '..', 'patterns', params.slug, 'main.bicep');
+    bicepContent = fs.readFileSync(bicepPath, 'utf-8');
+  } catch {
+    bicepContent = '';
   }
 
   return (
@@ -133,20 +143,22 @@ export default function PatternDetailPage({ params }: { params: { slug: string }
         </div>
       </div>
 
+      {bicepContent && (
+        <div className="mb-6">
+          <BicepViewer 
+            content={bicepContent}
+            patternTitle={pattern.title}
+          />
+        </div>
+      )}
+
       {pattern.deploymentModesSupported.includes('actions') && (
-        <div className="bg-neutral-white border border-neutral-border-default rounded-md p-8 mb-6 shadow-card">
-          <h2 className="text-[20px] leading-[28px] font-semibold text-neutral-text-primary mb-4">
-            Deploy via GitHub Actions
-          </h2>
-          <p className="text-[14px] text-neutral-text-secondary mb-4">
-            This pattern supports automated deployment through GitHub Actions. 
-            Use these example inputs in your workflow:
-          </p>
-          <div className="bg-neutral-subtle rounded-md p-4 overflow-x-auto">
-            <pre className="text-[12px]">
-              <code>{JSON.stringify(pattern.actionsWorkflowInputsExample, null, 2)}</code>
-            </pre>
-          </div>
+        <div className="mb-6">
+          <ActionsDeploySection 
+            patternSlug={pattern.slug}
+            patternTitle={pattern.title}
+            workflowInputsExample={pattern.actionsWorkflowInputsExample}
+          />
         </div>
       )}
 

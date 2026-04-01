@@ -108,3 +108,56 @@ Completed comprehensive restyle of the entire portal to align with Microsoft Azu
 - All interactions follow Fluent 2 motion principles (0.2s transitions)
 
 **Result:** Portal now presents as an official Azure experience with professional polish, consistent with Azure Portal and other Microsoft cloud services. Design language supports trust, familiarity, and enterprise credibility.
+
+### 2026-04-01: Pattern Detail Page Enhancement - Bicep Viewer and GitHub Actions Deployment Section
+
+Enhanced the pattern detail page (`/patterns/[slug]`) with two new features to improve developer experience and deployment guidance:
+
+**New Components Created:**
+
+1. **BicepViewer.tsx** (`/portal/components/BicepViewer.tsx`)
+   - Collapsible Bicep source code viewer with syntax highlighting
+   - Collapsed by default showing first 15 lines with fade-out gradient
+   - Expand/collapse toggle to view full source
+   - Copy button to copy entire Bicep source to clipboard
+   - Fluent 2 styling: white card with shadow, monospace font on neutral-page background
+   - Line count display when collapsed
+   - Responsive design with horizontal scroll for wide code
+
+2. **ActionsDeploySection.tsx** (`/portal/components/ActionsDeploySection.tsx`)
+   - Improved GitHub Actions deployment guidance section
+   - Direct "Run Workflow" link to GitHub Actions workflow page
+   - Step-by-step deployment instructions with numbered badges
+   - Visual presentation of recommended workflow inputs (JSON formatted)
+   - OIDC setup guidance with links to SECURITY.md
+   - Fluent 2 card styling with Azure blue accents
+   - Integration with siteConfig for dynamic GitHub repo URLs
+
+**Page Updates:**
+
+- **Modified** `/portal/app/patterns/[slug]/page.tsx`:
+  - Added Bicep content loading (parallels existing talk-track loading pattern)
+  - Integrated BicepViewer component (displays after Azure Services section)
+  - Replaced basic GitHub Actions JSON block with new ActionsDeploySection component
+  - Both sections conditionally render based on file availability and deployment mode support
+
+**Integration Details:**
+
+- BicepViewer loads `main.bicep` from patterns directory at build time using `fs.readFileSync`
+- ActionsDeploySection receives pattern slug, title, and workflow inputs example
+- Workflow URL dynamically generated: `https://github.com/{owner}/{repo}/actions/workflows/deploy-{slug}.yml`
+- Uses siteConfig (owner, repo, defaultBranch) for all GitHub links
+- Maintains existing Fluent 2 design system (colors, typography, spacing, shadows)
+
+**Developer Experience Improvements:**
+
+- Developers can now view Bicep infrastructure source directly in portal without navigating to GitHub
+- Clear, actionable GitHub Actions deployment workflow with direct links
+- Reduced friction for deploying patterns via automated workflows
+- Better visibility into infrastructure code and deployment automation
+
+**Files Created:** 2 new React components
+**Files Modified:** 1 page component
+**Design System:** All components follow Microsoft Fluent 2 standards established in previous work
+**Accessibility:** Keyboard navigation, focus states, and semantic HTML maintained throughout
+

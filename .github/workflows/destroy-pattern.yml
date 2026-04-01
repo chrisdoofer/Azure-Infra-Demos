@@ -1,0 +1,86 @@
+name: 'Destroy: Resource Group'
+
+on:
+  workflow_dispatch:
+    inputs:
+      resourceGroupName:
+        description: 'Resource group name to delete'
+        required: true
+        type: string
+      confirmDestroy:
+        description: 'Type "DELETE" to confirm destruction'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate-input:
+    name: Validate Destroy Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ inputs.confirmDestroy }}" != "DELETE" ]; then
+            echo "❌ Confirmation failed. You must type 'DELETE' to confirm resource group destruction."
+            exit 1
+          fi
+          echo "✅ Confirmation received. Proceeding with destruction."
+
+  destroy:
+    name: Delete Resource Group
+    needs: validate-input
+    runs-on: ubuntu-latest
+    environment: azure-demo
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Check if resource group exists
+        id: check
+        run: |
+          if az group exists --name ${{ inputs.resourceGroupName }} | grep -q "true"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Resource group '${{ inputs.resourceGroupName }}' exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Resource group '${{ inputs.resourceGroupName }}' does not exist"
+          fi
+      
+      - name: Delete resource group
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          echo "🗑️ Deleting resource group: ${{ inputs.resourceGroupName }}"
+          az group delete \
+            --name ${{ inputs.resourceGroupName }} \
+            --yes \
+            --no-wait
+          echo "✅ Deletion initiated (async). Resources will be removed shortly."
+      
+      - name: Deployment Summary
+        run: |
+          echo "## 🗑️ Resource Group Deletion" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check.outputs.exists }}" == "true" ]; then
+            echo "**Status:** ✅ Deletion initiated" >> $GITHUB_STEP_SUMMARY
+            echo "**Resource Group:** \`${{ inputs.resourceGroupName }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "**Initiated by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The resource group and all contained resources are being deleted asynchronously." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Check deletion status" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "az group show --name ${{ inputs.resourceGroupName }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status:** ⚠️ Resource group does not exist" >> $GITHUB_STEP_SUMMARY
+            echo "**Resource Group:** \`${{ inputs.resourceGroupName }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The specified resource group was not found. It may have already been deleted." >> $GITHUB_STEP_SUMMARY
+          fi
