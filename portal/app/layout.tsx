@@ -18,7 +18,7 @@ export default function RootLayout({
         <div className="min-h-screen flex flex-col">
           <header className="bg-[#1B1A19] sticky top-0 z-50">
             <div className="max-w-content mx-auto px-6 lg:px-8">
-              <div className="flex items-center justify-between h-16">
+              <div className="flex items-center justify-between h-[88px]">
                 <Link href="/" className="flex items-center gap-3">
                   <svg className="w-5 h-5" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect width="10" height="10" fill="#f25022"/>

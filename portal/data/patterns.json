@@ -180,5 +180,27 @@
       "enableWafPrevention": "true"
     },
     "lastReviewedDate": "2026-04-01"
+  },
+  {
+    "id": "pat-009",
+    "slug": "azure-arc-box",
+    "title": "Azure Arc Box (Servers & SQL)",
+    "summary": "Sandbox environment for demonstrating Azure Arc capabilities. Deploys Windows and Linux VMs that can be onboarded to Azure Arc for unified management, governance, and monitoring across hybrid infrastructure.",
+    "sourceUrl": "https://learn.microsoft.com/azure/azure-arc/overview",
+    "category": "governance",
+    "tags": ["azure-arc", "hybrid-cloud", "arc-servers", "arc-sql", "multi-cloud", "governance"],
+    "primaryServices": ["Azure Arc", "Arc-enabled Servers", "Arc-enabled SQL", "Log Analytics", "Azure Policy"],
+    "estimatedCostBand": "medium",
+    "complexity": 3,
+    "typicalDeployTimeMinutes": 15,
+    "deploymentModesSupported": ["portal", "actions"],
+    "templatePath": "patterns/azure-arc-box/azuredeploy.json",
+    "actionsWorkflowInputsExample": {
+      "resourceGroupName": "rg-arcbox",
+      "location": "australiaeast",
+      "prefix": "arc",
+      "adminUsername": "arcadmin"
+    },
+    "lastReviewedDate": "2026-04-01"
   }
 ]

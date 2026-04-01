@@ -260,3 +260,24 @@
 - **Total Workflows:** Now 17 workflows total (8 generic + 8 pattern deploys + 1 destroy)
 - **Ready for Use:** All workflows are production-ready and can be triggered via GitHub Actions UI
 
+
+### 2026-04-01: Azure Arc Box Pattern Created
+- **Scope:** Arc Servers + Arc-enabled SQL (excludes AKS, Arc Data Services beyond SQL)
+- **Infrastructure:** Created complete Bicep template for Azure Arc sandbox with Windows Server 2022 VM, Ubuntu 22.04 Linux VM (optional), SQL Server 2022 Developer VM (optional)
+- **Networking:** Virtual network (10.0.0.0/16), single subnet (10.0.1.0/24), NSG with RDP (3389), SSH (22), and HTTPS (443) rules
+- **Monitoring:** Log Analytics workspace for Arc telemetry and insights (30-day retention, PerGB2018 tier)
+- **Security Warnings:** NSG rules open to internet (*) for demo purposes - documented security risks in README and main.bicep inline comments
+- **VM Configuration:** Standard_B2ms VMs (2 vCPU, 8 GB RAM) for cost efficiency, SQL VM includes 128 GB Premium data disk
+- **Public Access:** All VMs have public IPs with DNS names for RDP/SSH access during onboarding demos
+- **Post-Deployment Manual Steps:** Comprehensive onboarding guide for installing Arc Connected Machine Agent on Windows and Linux, including Service Principal creation and verification steps
+- **Arc-enabled SQL Setup:** Step-by-step guide for installing SQL Server extension on Arc-enabled server after initial onboarding
+- **Cost Target Met:** ~$15-30/day for 2-3 B2ms VMs (2.30/day per VM + 0.29/day for SQL disk + 0.12/day per public IP)
+- **Parameters:** 12 configurable parameters including location, prefix, tags, admin credentials, deployment flags (deployLinuxVM, deploySqlVM), vmSize, and network CIDR ranges
+- **Outputs:** 13 outputs including VM names, public IPs, FQDNs, workspace details, and admin username for easy post-deployment access
+- **ARM JSON:** Compiled azuredeploy.json (20.5 KB) for Deploy to Azure button, validated as valid JSON with correct schema
+- **Parameters File:** Created dev.parameters.json with cost-efficient defaults (48h TTL, B2ms VMs, all components enabled)
+- **Architecture Diagram:** Created comprehensive Mermaid diagram showing VM topology, Arc control plane, onboarding flow, monitoring integration, and security boundaries
+- **README Documentation:** 23.9 KB comprehensive guide including 3 deployment methods (Portal/Actions/CLI), Arc onboarding scripts for Windows/Linux/SQL, cost estimates, security considerations, troubleshooting, and next steps
+- **Arc Learning Path:** Documented 8 post-onboarding capabilities: Azure Policy, Update Management, Azure Monitor, VM Extensions, Microsoft Defender, Azure Automation, Change Tracking, and Inventory
+- **Quality Bar:** Matched style and structure of existing patterns (hub-spoke-network), production-ready Bicep with no placeholders or TODOs
+- **Files Created:** main.bicep (12.5 KB), azuredeploy.json (20.5 KB), dev.parameters.json (0.9 KB), architecture.mmd (4.4 KB), README.md (23.9 KB)

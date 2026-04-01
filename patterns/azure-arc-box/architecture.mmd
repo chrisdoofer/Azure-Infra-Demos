@@ -1,0 +1,104 @@
+%% Azure Arc Box Architecture Diagram
+%% This diagram illustrates the Azure Arc sandbox environment with VMs for Arc Servers and Arc-enabled SQL
+
+graph TB
+    subgraph Internet["Internet"]
+        USER["Administrator<br/>Accessing VMs"]
+        ARC_SERVICES["Azure Arc Services<br/>(Control Plane)"]
+    end
+    
+    subgraph AzureCloud["Azure Subscription"]
+        
+        subgraph ResourceGroup["Azure Arc Box Resource Group"]
+            
+            subgraph Monitoring["Monitoring & Management"]
+                LAW["Log Analytics Workspace<br/>(Arc Monitoring & Insights)"]
+            end
+            
+            subgraph Network["Virtual Network<br/>10.0.0.0/16"]
+                
+                subgraph Subnet["Default Subnet<br/>10.0.1.0/24"]
+                    
+                    subgraph WinVM["Windows Server VM"]
+                        WIN_OS["Windows Server 2022<br/>NOT Arc-Connected<br/>(To be onboarded)"]
+                        WIN_PIP["Public IP<br/>(RDP Access)"]
+                    end
+                    
+                    subgraph LinuxVM["Linux VM"]
+                        LINUX_OS["Ubuntu 22.04 LTS<br/>NOT Arc-Connected<br/>(To be onboarded)"]
+                        LINUX_PIP["Public IP<br/>(SSH Access)"]
+                    end
+                    
+                    subgraph SqlVM["SQL Server VM"]
+                        SQL_OS["Windows Server 2022<br/>+ SQL Server 2022 Dev<br/>NOT Arc-Connected<br/>(To be onboarded)"]
+                        SQL_DATA["Data Disk<br/>(128 GB Premium)"]
+                        SQL_PIP["Public IP<br/>(RDP Access)"]
+                    end
+                end
+                
+                NSG["Network Security Group<br/>Allow: RDP (3389)<br/>Allow: SSH (22)<br/>Allow: HTTPS (443)"]
+            end
+        end
+        
+        subgraph ArcControlPlane["Azure Arc Control Plane<br/>(After Onboarding)"]
+            ARC_SERVERS["Arc-enabled Servers<br/>(Projected Resources)"]
+            ARC_SQL["Arc-enabled SQL<br/>(Projected SQL Instances)"]
+            POLICIES["Azure Policy<br/>(Governance)"]
+            UPDATES["Update Management<br/>(Patch Management)"]
+            EXTENSIONS["VM Extensions<br/>(Monitoring Agents)"]
+        end
+    end
+    
+    subgraph OnboardingProcess["Post-Deployment: Arc Onboarding"]
+        SCRIPT["Install Azure Arc Agent<br/>on Each VM"]
+        CONNECT["Connect to Azure<br/>Service Principal Auth"]
+    end
+    
+    %% User access to VMs
+    USER -->|RDP| WIN_PIP
+    USER -->|SSH| LINUX_PIP
+    USER -->|RDP| SQL_PIP
+    
+    %% Network security
+    NSG -.->|Applies to| Subnet
+    
+    %% Monitoring connections
+    WIN_OS -.->|Boot Diagnostics| LAW
+    LINUX_OS -.->|Boot Diagnostics| LAW
+    SQL_OS -.->|Boot Diagnostics| LAW
+    
+    %% Arc onboarding flow (manual post-deployment)
+    WIN_OS -.->|Manual Onboarding| SCRIPT
+    LINUX_OS -.->|Manual Onboarding| SCRIPT
+    SQL_OS -.->|Manual Onboarding| SCRIPT
+    SCRIPT -.->|Install Connected Machine Agent| CONNECT
+    CONNECT -.->|Registers VMs as| ARC_SERVERS
+    SQL_OS -.->|Additional SQL Extension| ARC_SQL
+    
+    %% Arc control plane capabilities
+    ARC_SERVERS -->|Sends Telemetry| LAW
+    ARC_SQL -->|SQL Metrics & Logs| LAW
+    ARC_SERVERS -.->|Governed by| POLICIES
+    ARC_SERVERS -.->|Managed by| UPDATES
+    ARC_SERVERS -.->|Deploy| EXTENSIONS
+    
+    %% Azure Arc Services connectivity
+    ARC_SERVERS -->|Secure Outbound<br/>HTTPS 443| ARC_SERVICES
+    ARC_SQL -->|Secure Outbound<br/>HTTPS 443| ARC_SERVICES
+    
+    %% Styling
+    classDef vmStyle fill:#fff4e1,stroke:#ff8c00,stroke-width:2px
+    classDef networkStyle fill:#e1f5ff,stroke:#0078d4,stroke-width:2px
+    classDef securityStyle fill:#ffcccc,stroke:#d13438,stroke-width:2px
+    classDef arcStyle fill:#ccffcc,stroke:#107c10,stroke-width:3px
+    classDef monitoringStyle fill:#f0e6ff,stroke:#7f00ff,stroke-width:2px
+    classDef internetStyle fill:#ffe6e6,stroke:#999,stroke-width:2px
+    classDef onboardingStyle fill:#fff9e6,stroke:#ffb900,stroke-width:2px,stroke-dasharray: 5 5
+    
+    class WinVM,LinuxVM,SqlVM,WIN_OS,LINUX_OS,SQL_OS vmStyle
+    class Network,Subnet,NSG networkStyle
+    class NSG securityStyle
+    class ArcControlPlane,ARC_SERVERS,ARC_SQL,POLICIES,UPDATES,EXTENSIONS,ARC_SERVICES arcStyle
+    class LAW,Monitoring monitoringStyle
+    class Internet,USER internetStyle
+    class OnboardingProcess,SCRIPT,CONNECT onboardingStyle

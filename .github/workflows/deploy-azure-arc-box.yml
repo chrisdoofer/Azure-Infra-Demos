@@ -1,0 +1,123 @@
+name: 'Deploy: Azure Arc Box (Servers & SQL)'
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: 'Azure region'
+        required: true
+        default: 'australiaeast'
+        type: choice
+        options: [australiaeast, eastus, westus2, northeurope, westeurope, uksouth, southeastasia]
+      prefix:
+        description: 'Resource name prefix'
+        required: true
+        default: 'arc'
+        type: string
+      resourceGroupName:
+        description: 'Resource group name (leave empty for auto-generated)'
+        required: false
+        type: string
+      adminUsername:
+        description: 'VM admin username'
+        required: true
+        default: 'arcadmin'
+        type: string
+      adminPassword:
+        description: 'VM admin password (min 12 chars, complex)'
+        required: true
+        type: string
+      deployLinuxVM:
+        description: 'Deploy Linux VM for Arc Servers demo'
+        required: true
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+      deploySqlVM:
+        description: 'Deploy SQL Server VM for Arc-enabled SQL demo'
+        required: true
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PATTERN_SLUG: 'azure-arc-box'
+  PATTERN_DIR: 'patterns/azure-arc-box'
+
+jobs:
+  validate:
+    name: Validate Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Bicep
+        run: az bicep build --file ${{ env.PATTERN_DIR }}/main.bicep
+
+  deploy:
+    name: Deploy to Azure
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: azure-demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set Resource Group
+        id: rg
+        run: |
+          if [ -z "${{ inputs.resourceGroupName }}" ]; then
+            echo "name=rg-${{ inputs.prefix }}-azure-arc-box" >> $GITHUB_OUTPUT
+          else
+            echo "name=${{ inputs.resourceGroupName }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Resource Group
+        run: |
+          az group create \
+            --name ${{ steps.rg.outputs.name }} \
+            --location ${{ inputs.location }} \
+            --tags owner=${{ github.actor }} workload=azure-arc-box environment=demo ttlHours=48
+
+      - name: Deploy Pattern
+        run: |
+          az deployment group create \
+            --resource-group ${{ steps.rg.outputs.name }} \
+            --template-file ${{ env.PATTERN_DIR }}/main.bicep \
+            --parameters \
+              prefix=${{ inputs.prefix }} \
+              location=${{ inputs.location }} \
+              adminUsername=${{ inputs.adminUsername }} \
+              adminPassword=${{ inputs.adminPassword }} \
+              deployLinuxVM=${{ inputs.deployLinuxVM }} \
+              deploySqlVM=${{ inputs.deploySqlVM }} \
+            --name deploy-azure-arc-box-$(date +%Y%m%d%H%M%S)
+
+      - name: Deployment Summary
+        run: |
+          echo "## ✅ Azure Arc Box Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pattern:** Azure Arc Box (Servers & SQL)" >> $GITHUB_STEP_SUMMARY
+          echo "**Resource Group:** ${{ steps.rg.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Location:** ${{ inputs.location }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Linux VM:** ${{ inputs.deployLinuxVM }}" >> $GITHUB_STEP_SUMMARY
+          echo "**SQL VM:** ${{ inputs.deploySqlVM }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. RDP/SSH into VMs using the public IPs" >> $GITHUB_STEP_SUMMARY
+          echo "2. Install Azure Arc Connected Machine Agent" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verify Arc onboarding in Azure Portal" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Teardown" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "az group delete --name ${{ steps.rg.outputs.name }} --yes --no-wait" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
